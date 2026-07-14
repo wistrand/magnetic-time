@@ -1,6 +1,6 @@
 # Plan: magnetic clock
 
-> Status: in progress. Phase 1 done; next is phase 2.
+> Status: in progress. Phases 1-4 done; next is phase 5 (tuning).
 
 ## Goal
 
@@ -52,38 +52,47 @@ vector face layer at all), so screen and dump are identical by construction.
 
 ### Phase 2: field model and field debug views
 
-- [ ] Data-driven dipole layouts per hand (start: tip magnet on each hand)
-- [ ] B and grad(|B|^2) evaluation summed over all dipoles
-- [ ] Heatmap, quiver, and dipole-marker debug views, `--view` flag in headless
-- [ ] Dev panel with view toggles
+- [x] Data-driven dipole layouts per hand (`src/field.rs`, tip magnet each)
+- [x] B and grad(|B|^2) evaluation summed over all dipoles
+- [x] Heatmap, quiver, and dipole-marker debug views, `--view` flag in headless
+- [x] Dev panel with view toggles
 
-**Verify:** dump `--view field` and `--view quiver` at two different times;
-field lobes sit on the hand tips and rotate with the hands.
+**Verify:** done. Field lobes sit on the hand tips at 10:08:30 and 02:40:15
+and rotate with the hands; quiver arrows converge on the tips. Sim/world
+coordinates are clock-face units (center origin, dial radius 1.0, y down),
+defined in `src/hands.rs`; hand geometry is shared between render and field.
 
 ### Phase 3: particle layer
 
-- [ ] Particle state, deterministic seeded init, circular dish boundary
-- [ ] Overdamped step: field force, drag/mobility, Brownian noise, clamped dt,
-      speed cap
-- [ ] Spatial hash grid and soft-core repulsion
-- [ ] Buffer rasterization as dots (strokes come with chains), additive blend,
-      cleared every frame
-- [ ] Velocity-coloring and hash-occupancy debug views
+- [x] Particle state (`src/sim.rs`), seeded SplitMix64 init, dish boundary
+- [x] Overdamped step: field force, drag/mobility, Brownian noise, fixed dt,
+      speed cap on the magnetic term only
+- [x] Spatial hash grid and soft-core repulsion
+- [x] Buffer rasterization as additive soft dots, cleared every frame
+- [x] Velocity-coloring and hash-occupancy debug views; sim sliders in panel
 
-**Verify:** dump after `--sim-seconds 120` at time scale 1: particles
-clustered at hand tips, no collapse to a point, empty dish elsewhere. Dump at
-higher time scale: comet trail behind the second hand.
+**Verify:** done. At 120 and 600 sim-seconds: finite-size clusters on hour and
+minute tips, comet trail behind the second hand, and an emergent furrow ring
+of particles along the second hand's sweep circle. Velocity view confirms
+fast particles only near the tips. Headless perf: roughly 13 sim-seconds per
+wall second at the default particle count, single-threaded; add rayon in
+phase 4-5 if chains make this worse.
 
 ### Phase 4: chains
 
-- [ ] Induced per-particle moments with saturation cap
-- [ ] Cutoff dipole-dipole pair forces on the spatial hash
-- [ ] Stroke rendering aligned with local field; chain-bond debug view
-- [ ] Alternating-polarity strip layout as a second hand-magnet option
+- [x] Induced per-particle moments (unit local-B direction with a saturation
+      weight `chain_w` = |B|/b_sat capped at 1)
+- [x] Cutoff dipole-dipole pair forces on the spatial hash (5x5 cells, per-
+      particle neighbor cap, summed-speed cap; constants atop `src/sim.rs`)
+- [x] Stroke rendering aligned with local field; chain-bond debug view
+      (`--view chains`)
+- [x] Alternating-polarity strip layout (done early: `LayoutSpec` in
+      `src/field.rs`, `--magnets` flag, per-hand combos in the dev panel)
 
-**Verify:** dump `--view chains` and the normal view: visible strings of
-particles along field lines near magnets, not amorphous blobs; sim still
-interactive-speed at target particle count.
+**Verify:** done. Bond view shows strings of particles along field lines;
+normal view shows spike/fur filaments around clusters and in the second-hand
+comet. Chains cost ~2.4x headless runtime vs phase 3 (~6 sim-seconds per wall
+second at default count); still fine interactively.
 
 ### Phase 5: tuning and character
 

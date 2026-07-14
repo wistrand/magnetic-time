@@ -28,7 +28,19 @@ hand: tip-only magnet vs an alternating-polarity strip give visibly different
 particle signatures (single blob vs stripes).
 
 Field of one dipole at offset r: `B(r) = k * (3(m.r_hat)r_hat - m) / |r|^3`.
-Total B is the sum over all dipoles of all hands.
+Total B is the sum over all field elements of all hands.
+
+Magnets have a shape (`MagnetShape` in `src/field.rs`), which changes the
+field, not just the marker:
+
+- Point: ideal dipole, near field clamped at MIN_DIST.
+- Disc: same dipole far field (exact for a uniformly magnetized disc), near
+  field clamped at the disc radius instead, giving a large soft capture zone
+  with no singular core.
+- Rect: a bar magnet as two pole faces of distributed magnetic charge (a few
+  point charges per face, `q * r_hat / r^2` each), total charge scaled so the
+  far field matches a point dipole of the same strength. Near the magnet the
+  field is face-shaped: flat approach zones at the poles, weak flanks.
 
 A superparamagnetic bead is pulled toward high field magnitude regardless of
 sign: `F_field ∝ grad(|B|^2)`. Polarity still shapes the pattern through the

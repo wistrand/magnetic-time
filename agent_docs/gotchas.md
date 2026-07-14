@@ -27,6 +27,40 @@ lands, and add what implementation teaches.
 - Recreate the texture on window resize; `TextureHandle::set` with a
   different-sized image than the displayed rect gives scaling artifacts.
 
+## Findings from phase 3
+
+- The MIN_DIST field clamp makes |B| flat inside the clamp radius, so the
+  numeric gradient is near zero there and particles collect in a shell at the
+  clamp boundary: tip clusters render as small donuts. Harmless at current
+  sizes (the hand covers the hole); revisit in tuning if it reads badly.
+- Cluster cores sit at the speed cap in the velocity view: captured particles
+  jitter in the attraction/repulsion equilibrium instead of resting. Purely
+  visual at dot scale; consider a rest deadzone during tuning if it shimmers.
+- The second hand plows a visible furrow of particles along its sweep circle
+  over repeated laps. Emergent, looks good, keep it.
+
+## Findings from phase 4
+
+- At the default chain threshold (b_sat in `SimParams`), chaining is active
+  over most of the dial, giving an all-over fur texture. Striking, but if
+  tuning wants chains only near the hands, raise b_sat; it scales both the
+  pair force and the stroke look.
+- Live particle-count changes must rebuild the spatial hash on truncation or
+  stale indices in the buckets can index out of bounds before the next step.
+  `Sim::set_count` handles this; keep it that way.
+
+## Findings from the rayon optimization
+
+- The sim's three passes are rayon-parallel; ~5x wall speedup at default
+  count. Noise had to move from a shared sequential RNG to stateless
+  per-(particle, step) streams to stay deterministic under threading. This
+  changed the noise sequence: dumps differ in fine detail from pre-rayon
+  runs but are still fully reproducible.
+- The |B|^2 gradient is forward-difference (2 extra field evals) instead of
+  central (4); no visible difference at GRAD_EPS in `src/sim.rs`.
+- When benchmarking, build first; `time cargo run` after an edit measures
+  the compile, not the sim.
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears

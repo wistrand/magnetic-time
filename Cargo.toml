@@ -7,6 +7,7 @@ edition = "2021"
 eframe = "0.32"
 chrono = "0.4"
 png = "0.17"
+rayon = "1"
 
 # Pixel loops are unusable at opt-level 0.
 [profile.dev]

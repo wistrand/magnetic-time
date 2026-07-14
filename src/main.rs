@@ -1,11 +1,16 @@
 mod app;
 mod clock;
+mod field;
+mod hands;
 mod render;
+mod sim;
+mod vec2;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clock::ClockSource;
+use render::DebugViews;
 
 struct Options {
     headless: bool,
@@ -18,6 +23,11 @@ struct Options {
     size: u32,
     /// Initial time-speed multiplier (interactive).
     speed: f64,
+    views: DebugViews,
+    style: render::Style,
+    particles: usize,
+    seed: u64,
+    magnets: [field::LayoutSpec; 3],
 }
 
 impl Default for Options {
@@ -29,15 +39,75 @@ impl Default for Options {
             dump: None,
             size: 800,
             speed: 1.0,
+            views: DebugViews::default(),
+            style: render::Style::default(),
+            particles: sim::SimParams::default().count,
+            seed: sim::SimParams::default().seed,
+            magnets: field::default_specs(),
         }
     }
 }
 
 const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM:SS]
-                     [--sim-seconds N] [--size PX] [--speed N]";
+                     [--sim-seconds N] [--size PX] [--speed N]
+                     [--view field,quiver,dipoles,velocity,hash]
+                     [--particles N] [--seed N] [--stroke-len F]
+                     [--hide-hands | --show-hands]  (default: hidden)
+                     [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
+                     one value applies to all hands
+                     [--strengths HOUR,MINUTE,SECOND]  per-magnet moment scale;
+                     one value applies to all hands
+                     [--shapes HOUR,MINUTE,SECOND]  each point | disc:R | rect:FxW,
+                     F = length as fraction of hand length (0..2, 1 = full hand);
+                     one value applies to all hands";
+
+/// Parse --magnets: "tip,alt:6,tip" per hand, or one spec for all hands.
+fn parse_magnets(s: &str) -> Result<[field::LayoutSpec; 3], String> {
+    let parts: Vec<&str> = s.split(',').collect();
+    match parts.len() {
+        1 => {
+            let spec = field::LayoutSpec::parse(parts[0])?;
+            Ok([spec; 3])
+        }
+        3 => Ok([
+            field::LayoutSpec::parse(parts[0])?,
+            field::LayoutSpec::parse(parts[1])?,
+            field::LayoutSpec::parse(parts[2])?,
+        ]),
+        _ => Err("--magnets takes one spec or three (hour,minute,second)".to_string()),
+    }
+}
+
+/// Parse --shapes: one shape for all hands or "point,disc:0.05,rect:1x0.03".
+fn parse_shapes(s: &str) -> Result<[field::SpecShape; 3], String> {
+    let parts: Vec<&str> = s.split(',').collect();
+    match parts.len() {
+        1 => Ok([field::parse_shape(parts[0])?; 3]),
+        3 => Ok([
+            field::parse_shape(parts[0])?,
+            field::parse_shape(parts[1])?,
+            field::parse_shape(parts[2])?,
+        ]),
+        _ => Err("--shapes takes one shape or three (hour,minute,second)".to_string()),
+    }
+}
+
+/// Parse --strengths: "1.5" for all hands or "2,1,0.5" per hand.
+fn parse_strengths(s: &str) -> Result<[f64; 3], String> {
+    let vals: Result<Vec<f64>, _> = s.split(',').map(str::parse::<f64>).collect();
+    let vals = vals.map_err(|e| format!("--strengths: {e}"))?;
+    match vals.len() {
+        1 => Ok([vals[0]; 3]),
+        3 => Ok([vals[0], vals[1], vals[2]]),
+        _ => Err("--strengths takes one value or three (hour,minute,second)".to_string()),
+    }
+}
 
 fn parse_args() -> Result<Options, String> {
     let mut opts = Options::default();
+    // Applied after the loop so --strengths/--shapes work in any flag order.
+    let mut strengths: Option<[f64; 3]> = None;
+    let mut shapes: Option<[field::SpecShape; 3]> = None;
     let mut args = std::env::args().skip(1);
     let value = |name: &str, args: &mut dyn Iterator<Item = String>| {
         args.next().ok_or(format!("{name} needs a value"))
@@ -62,8 +132,39 @@ fn parse_args() -> Result<Options, String> {
                     .parse()
                     .map_err(|e| format!("--speed: {e}"))?
             }
+            "--view" => opts.views = DebugViews::parse(&value("--view", &mut args)?)?,
+            "--particles" => {
+                opts.particles = value("--particles", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--particles: {e}"))?
+            }
+            "--seed" => {
+                opts.seed = value("--seed", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--seed: {e}"))?
+            }
+            "--magnets" => opts.magnets = parse_magnets(&value("--magnets", &mut args)?)?,
+            "--strengths" => strengths = Some(parse_strengths(&value("--strengths", &mut args)?)?),
+            "--shapes" => shapes = Some(parse_shapes(&value("--shapes", &mut args)?)?),
+            "--stroke-len" => {
+                opts.style.stroke_len = value("--stroke-len", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--stroke-len: {e}"))?
+            }
+            "--hide-hands" => opts.style.show_hands = false,
+            "--show-hands" => opts.style.show_hands = true,
             "--help" | "-h" => return Err(USAGE.to_string()),
             other => return Err(format!("unknown argument '{other}'\n{USAGE}")),
+        }
+    }
+    if let Some(s) = strengths {
+        for (spec, strength) in opts.magnets.iter_mut().zip(s) {
+            spec.strength = strength;
+        }
+    }
+    if let Some(s) = shapes {
+        for (spec, shape) in opts.magnets.iter_mut().zip(s) {
+            spec.shape = shape;
         }
     }
     if opts.headless && opts.dump.is_none() {
@@ -74,11 +175,24 @@ fn parse_args() -> Result<Options, String> {
 
 fn run_headless(opts: &Options) -> Result<(), String> {
     let start = opts.time.unwrap_or_else(|| ClockSource::wall(1.0).now());
-    // Phase 1: no simulation yet, advancing time is just addition. Once the
-    // particle sim exists this becomes a fixed-dt stepping loop.
-    let t = start + opts.sim_seconds;
+    let layouts = field::build_layouts(&opts.magnets);
+    let params = sim::SimParams {
+        count: opts.particles,
+        seed: opts.seed,
+        ..Default::default()
+    };
+    let mut particle_sim = sim::Sim::new(params);
+    let t = particle_sim.advance(&layouts, start, opts.sim_seconds);
+    let sources = field::FieldSources::at_time(&layouts, t);
     let mut fb = render::Framebuffer::new(opts.size, opts.size);
-    render::draw_clock(&mut fb, t);
+    render::draw_clock(
+        &mut fb,
+        t,
+        &sources,
+        opts.views,
+        opts.style,
+        Some(&particle_sim),
+    );
     let path = opts.dump.as_ref().unwrap();
     render::write_png(path, &fb)?;
     println!("wrote {} ({}x{}, time {})", path.display(), fb.width, fb.height, clock::format_time(t));
@@ -117,7 +231,20 @@ fn main() -> ExitCode {
     match eframe::run_native(
         "magnetic-time",
         native_options,
-        Box::new(|_cc| Ok(Box::new(app::ClockApp::new(clock)))),
+        Box::new(move |_cc| {
+            let params = sim::SimParams {
+                count: opts.particles,
+                seed: opts.seed,
+                ..Default::default()
+            };
+            Ok(Box::new(app::ClockApp::new(
+                clock,
+                opts.views,
+                opts.style,
+                params,
+                opts.magnets,
+            )))
+        }),
     ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

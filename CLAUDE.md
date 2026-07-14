@@ -27,6 +27,12 @@ Project is in the planning stage; no code exists yet.
 cargo run --release                 # interactive clock
 cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.png
                                     # render offscreen, write PNG, exit (agent verification)
+                                    # more flags: --view field,quiver,dipoles,velocity,hash,chains
+                                    #   --particles N --seed N --size PX --stroke-len F
+                                    #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
+                                    #   --strengths F (one value, or hour,minute,second)
+                                    #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
+                                    #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
 cargo check                         # compile check; do not run cargo test
 ```
 
