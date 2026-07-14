@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>magnetic-time</title>
+<meta name="description" content="A clock whose hands are magnets sweeping beneath a layer of magnetic particles. Rust + egui.">
+<style>
+  :root {
+    --bg: #10121a;
+    --panel: #181b26;
+    --text: #c9cede;
+    --dim: #8a91a8;
+    --accent: #7daaff;
+    --rule: #262b3a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 0 20px 80px; }
+  header { text-align: center; padding: 56px 0 8px; }
+  h1 {
+    font-size: 2.2rem;
+    letter-spacing: 0.04em;
+    color: #e8ebf5;
+    font-weight: 600;
+  }
+  .tagline { color: var(--dim); margin-top: 8px; font-size: 1.05rem; }
+  .hero { margin: 36px 0; }
+  h2 {
+    font-size: 1.25rem;
+    color: #e8ebf5;
+    margin: 48px 0 14px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+  }
+  p { margin: 0 0 14px; }
+  figure { margin: 24px 0; }
+  img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    display: block;
+  }
+  figcaption {
+    color: var(--dim);
+    font-size: 0.9rem;
+    margin-top: 8px;
+    text-align: center;
+  }
+  .gallery {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 640px) { .gallery { grid-template-columns: 1fr; } }
+  code, pre {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+  }
+  code { background: var(--panel); padding: 2px 6px; border-radius: 4px; }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 14px;
+  }
+  pre code { background: none; padding: 0; }
+  ul { margin: 0 0 14px 24px; }
+  li { margin-bottom: 6px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  footer {
+    color: var(--dim);
+    font-size: 0.9rem;
+    text-align: center;
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>magnetic-time</h1>
+    <p class="tagline">A clock whose hands are magnets sweeping beneath a layer of magnetic particles.</p>
+  </header>
+
+  <figure class="hero">
+    <img src="img/rings.png" alt="Clock face covered in concentric rings and spirals of white particle chains on a dark dial" width="800" height="800">
+    <figcaption>The default preset. No hands are drawn; the time is whatever the particles say it is.</figcaption>
+  </figure>
+
+  <h2>What it is</h2>
+  <p>
+    A native desktop clock written in Rust with egui. The hour, minute, and
+    second hands each carry a magnet (a bar, a disc, or point dipoles arranged
+    along the hand), and above them sits a simulated dish of liquid containing
+    tens of thousands of magnetic particles. The particles are dragged along by
+    the moving field, lagging with viscous drag: slow hands carry their
+    particles with them, the second hand outruns its own and plows wakes,
+    ripples, and comet trails that slowly relax.
+  </p>
+  <p>
+    Nothing in the imagery is painted. Every ring, spiral, and starburst is the
+    trace the magnets leave in the particle layer as the hands keep time.
+  </p>
+
+  <h2>Gallery</h2>
+  <div class="gallery">
+    <figure>
+      <img src="img/hands.png" alt="Clock with visible hands over ring-shaped particle patterns" width="800" height="800" loading="lazy">
+      <figcaption>The same preset with the hands drawn.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/fur.png" alt="Clock hands coated in fur-like particle chains, with a wave of particles in the upper right" width="800" height="800" loading="lazy">
+      <figcaption>Alternating-pole strip magnets collect the particles onto the hands themselves.</figcaption>
+    </figure>
+  </div>
+  <figure>
+    <img src="img/field-debug.png" alt="Debug view with orange field-strength glow and dipole markers under the particle rings" width="800" height="800" loading="lazy">
+    <figcaption>Debug view: field-magnitude heatmap and magnet polarity markers under the particles.</figcaption>
+  </figure>
+
+  <h2>How it works</h2>
+  <ul>
+    <li>
+      Each hand's magnets are modeled as point dipoles, soft discs, or bar
+      magnets built from north/south pole faces of distributed magnetic charge.
+      The total field is summed analytically; no grid, no fluid solver.
+    </li>
+    <li>
+      Particles live in the overdamped regime: no inertia, velocity equals
+      mobility times the field-gradient force, plus Brownian noise and drag
+      against the dish. A speed cap on the magnetic pull is what makes the
+      second hand outrun its particles.
+    </li>
+    <li>
+      Each particle is superparamagnetic: it acquires a moment along the local
+      field, and nearby particles interact with the dipole-dipole pair force.
+      Head-to-tail attraction strings them into chains along field lines;
+      short-range soft-core repulsion keeps clumps from collapsing. Neighbor
+      search runs on a spatial hash grid, in parallel.
+    </li>
+    <li>
+      Rendering is a CPU pixel buffer: magnetized particles draw as short
+      additive strokes aligned with the local field, so chains fuse into
+      filaments. The buffer is fully cleared every frame; there are no motion
+      trails. What looks like a trail is particles that are actually there.
+    </li>
+  </ul>
+
+  <h2>Running it</h2>
+  <pre><code>cargo run --release</code></pre>
+  <p>
+    A dev panel exposes every tunable live: magnet layout, shape, and strength
+    per hand, particle count, mobility, chain physics, stroke length, and a
+    time-speed multiplier up to 10000x for watching the hour hand work.
+  </p>
+  <p>
+    There is also a headless mode that simulates a stretch of clock time and
+    writes a PNG, used for reproducible renders:
+  </p>
+  <pre><code>cargo run --release -- --headless --time 13:37:35 --sim-seconds 600 \
+    --dump out.png --size 800</code></pre>
+
+  <footer>
+    MIT licensed. Built in Rust with egui; the simulation and renderer are
+    dependency-light (rayon, chrono, png).
+  </footer>
+</main>
+</body>
+</html>

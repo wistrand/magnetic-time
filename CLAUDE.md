@@ -3,22 +3,24 @@ file in `agent_docs/`.
 
 ## What this is
 
-A Rust + egui desktop clock. The hands carry magnets (modeled as rigid sets of
-point dipoles). Above them sits a simulated liquid layer of magnetic particles
+A Rust + egui desktop clock. The hands carry magnets (point dipoles, soft
+discs, or bar magnets built from pole-face charges). Above them sits a simulated liquid layer of magnetic particles
 in the overdamped regime: each frame, particle velocity is computed from the
 field gradient of the hand magnets plus short-range dipole-dipole interaction
 (chain formation) plus drag, noise, and boundary forces. Particles are
 rasterized into a CPU pixel buffer shown as an egui texture; the clock face and
 hands are egui vector shapes.
 
-Project is in the planning stage; no code exists yet.
+Phases 1-4 of [agent_docs/plan.md](agent_docs/plan.md) are built; tuning
+(phase 5) is ongoing with the owner.
 
 ## Layout
 
 | Path          | Role                                                |
 |---------------|-----------------------------------------------------|
-| `src/`        | application code (once scaffolded)                  |
+| `src/`        | application code                                    |
 | `agent_docs/` | plan, design decisions, gotchas (linked below)      |
+| `docs/`       | GitHub Pages site (index.html, img/), committed     |
 | `docs/debug/` | dumped debug bitmaps, disposable, gitignored        |
 
 ## Commands
