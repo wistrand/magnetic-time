@@ -1,0 +1,73 @@
+Guidance for agents working in this repo. Read this first, then the relevant
+file in `agent_docs/`.
+
+## What this is
+
+A Rust + egui desktop clock. The hands carry magnets (modeled as rigid sets of
+point dipoles). Above them sits a simulated liquid layer of magnetic particles
+in the overdamped regime: each frame, particle velocity is computed from the
+field gradient of the hand magnets plus short-range dipole-dipole interaction
+(chain formation) plus drag, noise, and boundary forces. Particles are
+rasterized into a CPU pixel buffer shown as an egui texture; the clock face and
+hands are egui vector shapes.
+
+Project is in the planning stage; no code exists yet.
+
+## Layout
+
+| Path          | Role                                                |
+|---------------|-----------------------------------------------------|
+| `src/`        | application code (once scaffolded)                  |
+| `agent_docs/` | plan, design decisions, gotchas (linked below)      |
+| `docs/debug/` | dumped debug bitmaps, disposable, gitignored        |
+
+## Commands
+
+```bash
+cargo run --release                 # interactive clock
+cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.png
+                                    # render offscreen, write PNG, exit (agent verification)
+cargo check                         # compile check; do not run cargo test
+```
+
+Headless flags are the planned interface; keep this block in sync when the CLI
+lands.
+
+## Docs
+
+- [agent_docs/plan.md](agent_docs/plan.md): phased build plan and status. Start here for any implementation work.
+- [agent_docs/design-simulation.md](agent_docs/design-simulation.md): physics model: dipole field, overdamped particles, chain formation. Read before touching sim code.
+- [agent_docs/design-rendering.md](agent_docs/design-rendering.md): pixel-buffer rendering, debug views, headless PNG dump.
+- [agent_docs/gotchas.md](agent_docs/gotchas.md): known traps (numeric stability, egui performance).
+
+## Invariants
+
+- The particle buffer is fully cleared every frame. Never add decay, motion
+  trails, or phosphor effects; the owner explicitly rejected them.
+- All time flows from one clock source with a speed multiplier. Never read wall
+  time anywhere else in sim or rendering.
+- Physics steps use a fixed, clamped dt decoupled from frame rate. Frame rate
+  must never change simulation outcomes.
+- Headless dump and interactive mode share the same simulation and
+  rasterization path, so dumped bitmaps are faithful to what the user sees.
+- Particle interactions are cutoff-limited and use the spatial hash. Never
+  introduce an all-pairs O(N²) loop.
+
+## Conventions
+
+- Verify changes visually: run the headless dump and read the PNG. No test
+  suite; do not add one unasked.
+- Rust 2021+, rustfmt defaults. Do not run formatters or linters unasked.
+- Keep sim constants as named tunables in one place, exposed in the dev slider
+  panel, not scattered literals.
+
+## Documentation Style
+
+- Markdown links for doc references an agent should follow, not backticks.
+  Backticks are for source paths and inline code. Align table columns.
+- No AI-isms (no "powerful", "seamlessly", "leverage", rule-of-three, "not just
+  X but Y"). No em dashes or emojis in project copy. State the point directly.
+- Concise; assume the agent is competent. Add only what it can't infer.
+- State each rule on its own line as always/never.
+- Mark inferred claims and open questions; don't present a guess as fact.
+- Keep this file the routing entry point; subsystem detail goes in agent_docs/.

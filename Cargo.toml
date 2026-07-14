@@ -1,0 +1,13 @@
+[package]
+name = "magnetic-time"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.32"
+chrono = "0.4"
+png = "0.17"
+
+# Pixel loops are unusable at opt-level 0.
+[profile.dev]
+opt-level = 2
