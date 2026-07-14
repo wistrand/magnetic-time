@@ -200,6 +200,50 @@ pub fn parse_shape(s: &str) -> Result<SpecShape, String> {
     }
 }
 
+/// Parse a magnet layout list: "tip,alt:6,tip" per hand (hour,minute,second)
+/// or one spec applied to all hands. Shared by the CLI --magnets flag and the
+/// web component's magnets attribute.
+pub fn parse_magnets(s: &str) -> Result<[LayoutSpec; 3], String> {
+    let parts: Vec<&str> = s.split(',').collect();
+    match parts.len() {
+        1 => {
+            let spec = LayoutSpec::parse(parts[0])?;
+            Ok([spec; 3])
+        }
+        3 => Ok([
+            LayoutSpec::parse(parts[0])?,
+            LayoutSpec::parse(parts[1])?,
+            LayoutSpec::parse(parts[2])?,
+        ]),
+        _ => Err("magnets takes one spec or three (hour,minute,second)".to_string()),
+    }
+}
+
+/// Parse a shape list: one shape for all hands or "point,disc:0.05,rect:1x0.03".
+pub fn parse_shapes(s: &str) -> Result<[SpecShape; 3], String> {
+    let parts: Vec<&str> = s.split(',').collect();
+    match parts.len() {
+        1 => Ok([parse_shape(parts[0])?; 3]),
+        3 => Ok([
+            parse_shape(parts[0])?,
+            parse_shape(parts[1])?,
+            parse_shape(parts[2])?,
+        ]),
+        _ => Err("shapes takes one shape or three (hour,minute,second)".to_string()),
+    }
+}
+
+/// Parse a strength list: "1.5" for all hands or "2,1,0.5" per hand.
+pub fn parse_strengths(s: &str) -> Result<[f64; 3], String> {
+    let vals: Result<Vec<f64>, _> = s.split(',').map(str::parse::<f64>).collect();
+    let vals = vals.map_err(|e| format!("strengths: {e}"))?;
+    match vals.len() {
+        1 => Ok([vals[0]; 3]),
+        3 => Ok([vals[0], vals[1], vals[2]]),
+        _ => Err("strengths takes one value or three (hour,minute,second)".to_string()),
+    }
+}
+
 /// Specs in hand order: hour, minute, second. These are the owner-tuned
 /// "rings" preset defaults; change them only with the owner.
 pub fn default_specs() -> [LayoutSpec; 3] {

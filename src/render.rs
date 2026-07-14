@@ -26,10 +26,67 @@ const HAND_SECOND: Color = [225, 75, 60, 255];
 const QUIVER: Color = [80, 200, 255, 255];
 const POLE_N: Color = [235, 70, 70, 255];
 const POLE_S: Color = [70, 110, 245, 255];
-const PARTICLE: [u8; 3] = [125, 170, 255];
-/// Stroke color at full magnetization.
-const SATURATED: [u8; 3] = [230, 240, 255];
 const HASH_CELL: [u8; 3] = [120, 255, 150];
+
+/// Particle color scale: `base` for unmagnetized dots, lerped toward `hot`
+/// as magnetization saturates. Additive blending pushes dense areas toward
+/// white regardless, so palettes read as a tint, not an absolute color.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Palette {
+    Ice,
+    Ember,
+    Emerald,
+    Violet,
+    Mono,
+}
+
+impl Palette {
+    pub const ALL: [Palette; 5] = [
+        Palette::Ice,
+        Palette::Ember,
+        Palette::Emerald,
+        Palette::Violet,
+        Palette::Mono,
+    ];
+
+    pub fn parse(s: &str) -> Result<Self, String> {
+        Self::ALL
+            .into_iter()
+            .find(|p| p.name() == s)
+            .ok_or_else(|| format!("unknown palette '{s}' (ice, ember, emerald, violet, mono)"))
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Palette::Ice => "ice",
+            Palette::Ember => "ember",
+            Palette::Emerald => "emerald",
+            Palette::Violet => "violet",
+            Palette::Mono => "mono",
+        }
+    }
+
+    fn base(self) -> [u8; 3] {
+        match self {
+            Palette::Ice => [125, 170, 255],
+            Palette::Ember => [255, 120, 40],
+            Palette::Emerald => [70, 215, 140],
+            Palette::Violet => [185, 110, 255],
+            Palette::Mono => [160, 165, 180],
+        }
+    }
+
+    /// Stroke color at full magnetization.
+    fn hot(self) -> [u8; 3] {
+        match self {
+            Palette::Ice => [230, 240, 255],
+            Palette::Ember => [255, 235, 190],
+            Palette::Emerald => [225, 255, 235],
+            Palette::Violet => [245, 225, 255],
+            Palette::Mono => [255, 255, 255],
+        }
+    }
+}
 
 /// Visual tunables that don't affect the simulation.
 #[derive(Clone, Copy)]
@@ -38,6 +95,8 @@ pub struct Style {
     pub stroke_len: f64,
     /// Draw the hands and hub (the field ignores this; magnets keep moving).
     pub show_hands: bool,
+    /// Particle color scale.
+    pub palette: Palette,
 }
 
 // Part of the owner-tuned "rings" preset: hands hidden, time read from the
@@ -47,6 +106,7 @@ impl Default for Style {
         Self {
             stroke_len: 0.6,
             show_hands: false,
+            palette: Palette::Ice,
         }
     }
 }
@@ -461,6 +521,8 @@ fn draw_quiver(fb: &mut Framebuffer, m: &Map, sources: &FieldSources) {
 fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, style: Style) {
     let pr = (m.r * 0.006).max(1.3);
     let max_speed = sim.params.max_speed;
+    let base = style.palette.base();
+    let hot = style.palette.hot();
     for i in 0..sim.pos.len() {
         let (x, y) = m.px(sim.pos[i]);
         if views.velocity {
@@ -473,15 +535,14 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
         if w > 0.15 && style.stroke_len > 0.0 {
             // Magnetized: a short stroke along the local field. Aligned
             // neighbors visually fuse into chains / spike-like filaments.
-            let c = [0, 1, 2].map(|k| {
-                (PARTICLE[k] as f32 + (SATURATED[k] as f32 - PARTICLE[k] as f32) * w) as u8
-            });
+            let c = [0, 1, 2]
+                .map(|k| (base[k] as f32 + (hot[k] as f32 - base[k] as f32) * w) as u8);
             let hl = pr * (1.2 + 2.6 * w as f64) * style.stroke_len;
             let d = sim.field[i].dir;
             let (dx, dy) = (d.x * hl, d.y * hl);
             fb.capsule_add(x - dx, y - dy, x + dx, y + dy, pr * 0.6, c, 0.4 + 0.35 * w);
         } else {
-            fb.dot_add(x, y, pr, PARTICLE, 0.55);
+            fb.dot_add(x, y, pr, base, 0.55);
         }
     }
 }

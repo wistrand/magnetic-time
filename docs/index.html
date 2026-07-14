@@ -94,6 +94,7 @@
 
   <p style="text-align:center; margin-top:20px">
     <a href="app/" style="display:inline-block; padding:10px 22px; border:1px solid var(--accent); border-radius:8px">Run it live in your browser</a>
+    <a href="app/variants.html" style="display:inline-block; padding:10px 22px; border:1px solid var(--rule); border-radius:8px; margin-left:8px">Six variants</a>
   </p>
 
   <figure class="hero">
@@ -177,6 +178,24 @@
   </p>
   <pre><code>cargo run --release -- --headless --time 13:37:35 --sim-seconds 600 \
     --dump out.png --size 800</code></pre>
+
+  <h2>Embedding</h2>
+  <p>
+    The browser build ships as a web component. Copy <code>magnetic-clock.js</code>
+    and the <code>pkg/</code> directory from <a href="app/">app/</a>, then:
+  </p>
+  <pre><code>&lt;script type="module" src="magnetic-clock.js"&gt;&lt;/script&gt;
+
+&lt;magnetic-clock particles="12000" speed="60" show-hands
+                magnets="tip" shapes="rect:1x0.03"
+                strengths="0.1,0.05,0.6"&gt;&lt;/magnetic-clock&gt;</code></pre>
+  <p>
+    Attributes use the same grammar as the native CLI flags, are all optional
+    (defaults are the preset above), and are live: changing one reconfigures
+    the running simulation. Add <code>dev-panel</code> to expose the tuning
+    panel. Each element runs its own simulation, so keep instances per page
+    to a few.
+  </p>
 
   <footer>
     MIT licensed. Built in Rust with egui; the simulation and renderer are

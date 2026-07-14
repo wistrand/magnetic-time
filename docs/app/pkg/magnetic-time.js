@@ -1,3 +1,171 @@
+export class WebHandle {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        WebHandleFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_webhandle_free(ptr, 0);
+    }
+    /**
+     * Stop the app and release its WebGL context.
+     */
+    destroy() {
+        wasm.webhandle_destroy(this.__wbg_ptr);
+    }
+    constructor() {
+        const ret = wasm.webhandle_new();
+        this.__wbg_ptr = ret;
+        WebHandleFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {number} v
+     */
+    set_chain_compress(v) {
+        wasm.webhandle_set_chain_compress(this.__wbg_ptr, v);
+    }
+    /**
+     * @param {number} v
+     */
+    set_chain_range(v) {
+        wasm.webhandle_set_chain_range(this.__wbg_ptr, v);
+    }
+    /**
+     * @param {number} v
+     */
+    set_chain_spacing(v) {
+        wasm.webhandle_set_chain_spacing(this.__wbg_ptr, v);
+    }
+    /**
+     * @param {number} v
+     */
+    set_chain_strength(v) {
+        wasm.webhandle_set_chain_strength(this.__wbg_ptr, v);
+    }
+    /**
+     * @param {boolean} on
+     */
+    set_dev_panel(on) {
+        wasm.webhandle_set_dev_panel(this.__wbg_ptr, on);
+    }
+    /**
+     * @param {number} v
+     */
+    set_drag(v) {
+        wasm.webhandle_set_drag(this.__wbg_ptr, v);
+    }
+    /**
+     * Layout kinds per hand ("tip", "strip:N", "alt:N"). Resets strengths
+     * and shapes; the component re-applies those attributes afterwards.
+     * @param {string} v
+     */
+    set_magnets(v) {
+        const ptr0 = passStringToWasm0(v, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webhandle_set_magnets(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {number} v
+     */
+    set_max_speed(v) {
+        wasm.webhandle_set_max_speed(this.__wbg_ptr, v);
+    }
+    /**
+     * @param {number} v
+     */
+    set_mobility(v) {
+        wasm.webhandle_set_mobility(this.__wbg_ptr, v);
+    }
+    /**
+     * @param {number} v
+     */
+    set_noise(v) {
+        wasm.webhandle_set_noise(this.__wbg_ptr, v);
+    }
+    /**
+     * Particle color scale ("ice", "ember", "emerald", "violet", "mono").
+     * @param {string} v
+     */
+    set_palette(v) {
+        const ptr0 = passStringToWasm0(v, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webhandle_set_palette(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {number} n
+     */
+    set_particles(n) {
+        wasm.webhandle_set_particles(this.__wbg_ptr, n);
+    }
+    /**
+     * @param {number} v
+     */
+    set_repulsion(v) {
+        wasm.webhandle_set_repulsion(this.__wbg_ptr, v);
+    }
+    /**
+     * Per-hand shapes ("point", "disc:R", "rect:FxW").
+     * @param {string} v
+     */
+    set_shapes(v) {
+        const ptr0 = passStringToWasm0(v, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webhandle_set_shapes(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {boolean} on
+     */
+    set_show_hands(on) {
+        wasm.webhandle_set_show_hands(this.__wbg_ptr, on);
+    }
+    /**
+     * @param {number} v
+     */
+    set_speed(v) {
+        wasm.webhandle_set_speed(this.__wbg_ptr, v);
+    }
+    /**
+     * Per-hand strengths ("0.6" or "0.1,0.05,0.6").
+     * @param {string} v
+     */
+    set_strengths(v) {
+        const ptr0 = passStringToWasm0(v, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webhandle_set_strengths(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {number} v
+     */
+    set_stroke_len(v) {
+        wasm.webhandle_set_stroke_len(this.__wbg_ptr, v);
+    }
+    /**
+     * Start rendering on the given canvas. Attributes set before this call
+     * are part of the initial configuration.
+     * @param {HTMLCanvasElement} canvas
+     * @returns {Promise<void>}
+     */
+    start(canvas) {
+        const ret = wasm.webhandle_start(this.__wbg_ptr, canvas);
+        return ret;
+    }
+}
+if (Symbol.dispose) WebHandle.prototype[Symbol.dispose] = WebHandle.prototype.free;
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -143,6 +311,10 @@ function __wbg_get_imports() {
             const ret = arg0.button;
             return ret;
         },
+        __wbg_call_a6e5c5dce5018821: function() { return handleError(function (arg0, arg1, arg2) {
+            const ret = arg0.call(arg1, arg2);
+            return ret;
+        }, arguments); },
         __wbg_cancelAnimationFrame_086d6084925c4e06: function() { return handleError(function (arg0, arg1) {
             arg0.cancelAnimationFrame(arg1);
         }, arguments); },
@@ -381,9 +553,6 @@ function __wbg_get_imports() {
                 wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
             }
         },
-        __wbg_error_744744ff0c9861e6: function(arg0) {
-            console.error(arg0);
-        },
         __wbg_error_a6fa202b58aa1cd3: function(arg0, arg1) {
             let deferred0_0;
             let deferred0_1;
@@ -439,10 +608,6 @@ function __wbg_get_imports() {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         }, arguments); },
-        __wbg_getElementById_1cbd8f06dbe8eb8e: function(arg0, arg1, arg2) {
-            const ret = arg0.getElementById(getStringFromWasm0(arg1, arg2));
-            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-        },
         __wbg_getError_4d1465505158e016: function(arg0) {
             const ret = arg0.getError();
             return ret;
@@ -638,16 +803,6 @@ function __wbg_get_imports() {
             let result;
             try {
                 result = arg0 instanceof Element;
-            } catch (_) {
-                result = false;
-            }
-            const ret = result;
-            return ret;
-        },
-        __wbg_instanceof_HtmlCanvasElement_ed02ed9136056019: function(arg0) {
-            let result;
-            try {
-                result = arg0 instanceof HTMLCanvasElement;
             } catch (_) {
                 result = false;
             }
@@ -873,6 +1028,24 @@ function __wbg_get_imports() {
         __wbg_new_from_slice_77cdfb7977362f3c: function(arg0, arg1) {
             const ret = new Uint8Array(getArrayU8FromWasm0(arg0, arg1));
             return ret;
+        },
+        __wbg_new_typed_1824d93f294193e5: function(arg0, arg1) {
+            try {
+                var state0 = {a: arg0, b: arg1};
+                var cb0 = (arg0, arg1) => {
+                    const a = state0.a;
+                    state0.a = 0;
+                    try {
+                        return wasm_bindgen_8345026593482c3f___convert__closures_____invoke___js_sys_6023072529d895be___Function_fn_wasm_bindgen_8345026593482c3f___JsValue_____wasm_bindgen_8345026593482c3f___sys__Undefined___js_sys_6023072529d895be___Function_fn_wasm_bindgen_8345026593482c3f___JsValue_____wasm_bindgen_8345026593482c3f___sys__Undefined_______true_(a, state0.b, arg0, arg1);
+                    } finally {
+                        state0.a = a;
+                    }
+                };
+                const ret = new Promise(cb0);
+                return ret;
+            } finally {
+                state0.a = 0;
+            }
         },
         __wbg_new_with_record_from_str_to_blob_promise_6112280bc8a0f052: function() { return handleError(function (arg0) {
             const ret = new ClipboardItem(arg0);
@@ -1227,22 +1400,22 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 326, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 322, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_8345026593482c3f___convert__closures_____invoke___wasm_bindgen_8345026593482c3f___JsValue__core_7d5f0a2ba6a62c33___result__Result_____wasm_bindgen_8345026593482c3f___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Array<any>")], shim_idx: 219, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Array<any>")], shim_idx: 215, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_8345026593482c3f___convert__closures_____invoke___js_sys_6023072529d895be___Array______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 219, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 215, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_8345026593482c3f___convert__closures_____invoke___js_sys_6023072529d895be___Array______true__2);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 221, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 217, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_8345026593482c3f___convert__closures_____invoke___core_7d5f0a2ba6a62c33___result__Result_____wasm_bindgen_8345026593482c3f___JsValue___true_);
             return ret;
         },
@@ -1329,8 +1502,15 @@ function wasm_bindgen_8345026593482c3f___convert__closures_____invoke___wasm_bin
     }
 }
 
+function wasm_bindgen_8345026593482c3f___convert__closures_____invoke___js_sys_6023072529d895be___Function_fn_wasm_bindgen_8345026593482c3f___JsValue_____wasm_bindgen_8345026593482c3f___sys__Undefined___js_sys_6023072529d895be___Function_fn_wasm_bindgen_8345026593482c3f___JsValue_____wasm_bindgen_8345026593482c3f___sys__Undefined_______true_(arg0, arg1, arg2, arg3) {
+    wasm.wasm_bindgen_8345026593482c3f___convert__closures_____invoke___js_sys_6023072529d895be___Function_fn_wasm_bindgen_8345026593482c3f___JsValue_____wasm_bindgen_8345026593482c3f___sys__Undefined___js_sys_6023072529d895be___Function_fn_wasm_bindgen_8345026593482c3f___JsValue_____wasm_bindgen_8345026593482c3f___sys__Undefined_______true_(arg0, arg1, arg2, arg3);
+}
+
 
 const __wbindgen_enum_ResizeObserverBoxOptions = ["border-box", "content-box", "device-pixel-content-box"];
+const WebHandleFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_webhandle_free(ptr, 1));
 
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();

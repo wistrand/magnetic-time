@@ -93,6 +93,16 @@ lands, and add what implementation teaches.
 - `wasm-bindgen-cli` must exactly match the wasm-bindgen crate version;
   `scripts/build-web.sh` reads the version from the lockfile and installs to
   match.
+- The browser build is a web component: `WebHandle` in `src/web.rs` plus the
+  custom element in `docs/app/magnetic-clock.js`. Attribute grammar equals
+  the CLI grammar; the parsers are shared in `src/field.rs`. Setting magnets
+  resets per-hand strength/shape, so the JS re-applies all attributes in
+  ATTRS order on any change; keep that ordering.
+- Each `<magnetic-clock>` element runs its own full sim and owns a WebGL
+  context; a page with many instances multiplies CPU cost and hits the
+  browser's context limit around a dozen.
+- After changing any `#[wasm_bindgen]` signature, the JS glue in
+  `docs/app/pkg/` is stale until the owner reruns `scripts/build-web.sh`.
 
 ## Decision history
 

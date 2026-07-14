@@ -33,6 +33,8 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     # render offscreen, write PNG, exit (agent verification)
                                     # more flags: --view field,quiver,dipoles,velocity,hash,chains
                                     #   --particles N --seed N --size PX --stroke-len F
+                                    #   --palette ice|ember|emerald|violet|mono
+                                    #   --mobility F --max-speed F --noise F --repulsion F
                                     #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
                                     #   --strengths F (one value, or hour,minute,second)
                                     #   --chain-strength F --chain-spacing F --chain-range F

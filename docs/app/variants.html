@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>magnetic-time — variants</title>
+<style>
+  :root {
+    --bg: #10121a;
+    --text: #c9cede;
+    --dim: #8a91a8;
+    --rule: #262b3a;
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, sans-serif;
+    padding: 32px 20px 64px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.6rem;
+    color: #e8ebf5;
+    margin-bottom: 4px;
+  }
+  .sub {
+    text-align: center;
+    color: var(--dim);
+    margin-bottom: 32px;
+    font-size: 0.95rem;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+    max-width: 1060px;
+    margin: 0 auto;
+  }
+  figure {
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  magnetic-clock {
+    width: 100%;
+    aspect-ratio: 1;
+  }
+  figcaption {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: var(--dim);
+    border-top: 1px solid var(--rule);
+  }
+  figcaption b { color: var(--text); font-weight: 600; }
+  a { color: #7daaff; text-decoration: none; }
+  .back { text-align: center; margin-top: 32px; }
+</style>
+</head>
+<body>
+<h1>magnetic-time variants</h1>
+<p class="sub">
+  Six configurations of the same <code>&lt;magnetic-clock&gt;</code> component,
+  each a live simulation. View source for the attributes.
+</p>
+
+<div class="grid">
+  <figure>
+    <magnetic-clock particles="4000"></magnetic-clock>
+    <figcaption><b>Rings</b> — the default preset: full-length bar magnets,
+    no hands drawn.</figcaption>
+  </figure>
+
+  <figure>
+    <magnetic-clock particles="4000" show-hands
+                    magnets="tip" shapes="point"
+                    strengths="0.15,0.1,0.5"></magnetic-clock>
+    <figcaption><b>Classic</b> — visible hands with point magnets at the
+    tips; clusters and a comet trail.</figcaption>
+  </figure>
+
+  <figure>
+    <magnetic-clock particles="6000" show-hands
+                    magnets="alt:5,alt:5,alt:10" shapes="point"
+                    strengths="0.1,0.05,0.6"
+                    chain-strength="0.06" chain-range="0.03"
+                    mobility="2e-8" repulsion="0.08"
+                    max-speed="0.05"></magnetic-clock>
+    <figcaption><b>Fur</b> — alternating-pole strips with high mobility and
+    strong chaining; the hands wear a shaggy coat.</figcaption>
+  </figure>
+
+  <figure>
+    <magnetic-clock particles="4000" drag="0.8"
+                    shapes="disc:0.06,disc:0.05,disc:0.09"
+                    strengths="0.3,0.2,0.8"></magnetic-clock>
+    <figcaption><b>Swirl</b> — soft disc magnets under heavy drag coupling;
+    each magnet carries a solid particle eye and the dish drifts as one
+    fluid.</figcaption>
+  </figure>
+
+  <figure>
+    <magnetic-clock particles="4000" speed="120" palette="ember"></magnetic-clock>
+    <figcaption><b>Time-lapse</b> — 120x clock speed in the ember palette;
+    two hours of pattern evolution per minute.</figcaption>
+  </figure>
+
+  <figure>
+    <magnetic-clock particles="3000" palette="violet"
+                    chain-strength="0.06" chain-spacing="0.024"
+                    chain-range="0.045" stroke-len="2"></magnetic-clock>
+    <figcaption><b>Coarse</b> — widened chain spacing and long strokes in
+    violet; chunky beaded filaments.</figcaption>
+  </figure>
+</div>
+
+<p class="back"><a href="./">fullscreen clock</a> · <a href="../">project page</a></p>
+
+<script type="module" src="./magnetic-clock.js"></script>
+</body>
+</html>

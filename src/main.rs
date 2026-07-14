@@ -9,6 +9,8 @@ mod hands;
 mod render;
 mod sim;
 mod vec2;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
@@ -64,7 +66,9 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--sim-seconds N] [--size PX] [--speed N]
                      [--view field,quiver,dipoles,velocity,hash]
                      [--particles N] [--seed N] [--stroke-len F]
+                     [--palette ice|ember|emerald|violet|mono]
                      [--hide-hands | --show-hands]  (default: hidden)
+                     [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
                      [--grad-check]  verify analytic field gradient, then exit
@@ -75,51 +79,6 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--shapes HOUR,MINUTE,SECOND]  each point | disc:R | rect:FxW,
                      F = length as fraction of hand length (0..2, 1 = full hand);
                      one value applies to all hands";
-
-/// Parse --magnets: "tip,alt:6,tip" per hand, or one spec for all hands.
-#[cfg(not(target_arch = "wasm32"))]
-fn parse_magnets(s: &str) -> Result<[field::LayoutSpec; 3], String> {
-    let parts: Vec<&str> = s.split(',').collect();
-    match parts.len() {
-        1 => {
-            let spec = field::LayoutSpec::parse(parts[0])?;
-            Ok([spec; 3])
-        }
-        3 => Ok([
-            field::LayoutSpec::parse(parts[0])?,
-            field::LayoutSpec::parse(parts[1])?,
-            field::LayoutSpec::parse(parts[2])?,
-        ]),
-        _ => Err("--magnets takes one spec or three (hour,minute,second)".to_string()),
-    }
-}
-
-/// Parse --shapes: one shape for all hands or "point,disc:0.05,rect:1x0.03".
-#[cfg(not(target_arch = "wasm32"))]
-fn parse_shapes(s: &str) -> Result<[field::SpecShape; 3], String> {
-    let parts: Vec<&str> = s.split(',').collect();
-    match parts.len() {
-        1 => Ok([field::parse_shape(parts[0])?; 3]),
-        3 => Ok([
-            field::parse_shape(parts[0])?,
-            field::parse_shape(parts[1])?,
-            field::parse_shape(parts[2])?,
-        ]),
-        _ => Err("--shapes takes one shape or three (hour,minute,second)".to_string()),
-    }
-}
-
-/// Parse --strengths: "1.5" for all hands or "2,1,0.5" per hand.
-#[cfg(not(target_arch = "wasm32"))]
-fn parse_strengths(s: &str) -> Result<[f64; 3], String> {
-    let vals: Result<Vec<f64>, _> = s.split(',').map(str::parse::<f64>).collect();
-    let vals = vals.map_err(|e| format!("--strengths: {e}"))?;
-    match vals.len() {
-        1 => Ok([vals[0]; 3]),
-        3 => Ok([vals[0], vals[1], vals[2]]),
-        _ => Err("--strengths takes one value or three (hour,minute,second)".to_string()),
-    }
-}
 
 #[cfg(not(target_arch = "wasm32"))]
 fn parse_args() -> Result<Options, String> {
@@ -162,6 +121,26 @@ fn parse_args() -> Result<Options, String> {
                     .parse()
                     .map_err(|e| format!("--seed: {e}"))?
             }
+            "--mobility" => {
+                opts.sim.mobility = value("--mobility", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--mobility: {e}"))?
+            }
+            "--max-speed" => {
+                opts.sim.max_speed = value("--max-speed", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--max-speed: {e}"))?
+            }
+            "--noise" => {
+                opts.sim.noise = value("--noise", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--noise: {e}"))?
+            }
+            "--repulsion" => {
+                opts.sim.repulsion_strength = value("--repulsion", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--repulsion: {e}"))?
+            }
             "--chain-strength" => {
                 opts.sim.chain_strength = value("--chain-strength", &mut args)?
                     .parse()
@@ -187,13 +166,18 @@ fn parse_args() -> Result<Options, String> {
                     .parse()
                     .map_err(|e| format!("--drag: {e}"))?
             }
-            "--magnets" => opts.magnets = parse_magnets(&value("--magnets", &mut args)?)?,
-            "--strengths" => strengths = Some(parse_strengths(&value("--strengths", &mut args)?)?),
-            "--shapes" => shapes = Some(parse_shapes(&value("--shapes", &mut args)?)?),
+            "--magnets" => opts.magnets = field::parse_magnets(&value("--magnets", &mut args)?)?,
+            "--strengths" => {
+                strengths = Some(field::parse_strengths(&value("--strengths", &mut args)?)?)
+            }
+            "--shapes" => shapes = Some(field::parse_shapes(&value("--shapes", &mut args)?)?),
             "--stroke-len" => {
                 opts.style.stroke_len = value("--stroke-len", &mut args)?
                     .parse()
                     .map_err(|e| format!("--stroke-len: {e}"))?
+            }
+            "--palette" => {
+                opts.style.palette = render::Palette::parse(&value("--palette", &mut args)?)?
             }
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
@@ -320,6 +304,8 @@ fn main() -> ExitCode {
                 opts.style,
                 opts.sim,
                 opts.magnets,
+                true,
+                None,
             )))
         }),
     ) {
@@ -331,45 +317,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// Browser entry point: no CLI, preset defaults, reduced particle count
-/// (the sim runs single-threaded on wasm).
+/// Browser builds are driven entirely through `web::WebHandle` (see
+/// docs/app/magnetic-clock.js); nothing happens at module load.
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    use eframe::wasm_bindgen::JsCast;
-
     console_error_panic_hook::set_once();
-    wasm_bindgen_futures::spawn_local(async {
-        let document = web_sys::window()
-            .expect("no window")
-            .document()
-            .expect("no document");
-        let canvas = document
-            .get_element_by_id("clock_canvas")
-            .expect("no element with id clock_canvas")
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .expect("clock_canvas is not a canvas");
-
-        let params = sim::SimParams {
-            count: 15000,
-            ..Default::default()
-        };
-        let result = eframe::WebRunner::new()
-            .start(
-                canvas,
-                eframe::WebOptions::default(),
-                Box::new(move |_cc| {
-                    Ok(Box::new(app::ClockApp::new(
-                        clock::ClockSource::wall(1.0),
-                        render::DebugViews::default(),
-                        render::Style::default(),
-                        params,
-                        field::default_specs(),
-                    )))
-                }),
-            )
-            .await;
-        if let Err(e) = result {
-            web_sys::console::error_1(&format!("failed to start eframe: {e:?}").into());
-        }
-    });
 }

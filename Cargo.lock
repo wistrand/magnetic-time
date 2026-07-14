@@ -1714,6 +1714,7 @@ dependencies = [
  "eframe",
  "png 0.17.16",
  "rayon",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",

@@ -11,33 +11,16 @@
     background: #10121a;
     overflow: hidden;
   }
-  canvas {
-    display: block;
+  magnetic-clock {
     width: 100vw;
     height: 100vh;
-    outline: none;
-  }
-  #loading {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #8a91a8;
-    font: 15px system-ui, sans-serif;
   }
 </style>
 </head>
 <body>
-<div id="loading">loading simulation…</div>
-<canvas id="clock_canvas"></canvas>
-<script type="module">
-  import init from "./pkg/magnetic-time.js";
-  init().then(() => {
-    document.getElementById("loading").remove();
-  }).catch((e) => {
-    document.getElementById("loading").textContent = "failed to load: " + e;
-  });
-</script>
+<!-- Attributes use the same grammar as the native CLI flags. Remove
+     dev-panel for the clean clock-only view. -->
+<magnetic-clock dev-panel></magnetic-clock>
+<script type="module" src="./magnetic-clock.js"></script>
 </body>
 </html>

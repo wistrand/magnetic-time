@@ -15,6 +15,20 @@ use crate::sim::{Sim, SimParams};
 /// the excess display time; the hands stay truthful to the clock.
 const STEP_BUDGET: web_time::Duration = web_time::Duration::from_millis(12);
 
+/// A complete externally-set configuration, applied live. Used by the web
+/// component (attribute changes land here); native runs never push one.
+#[derive(Clone, Copy)]
+pub struct AppConfig {
+    pub specs: [LayoutSpec; 3],
+    pub style: Style,
+    pub speed: f64,
+    pub sim: SimParams,
+    pub show_panel: bool,
+}
+
+/// Single-slot channel for pushing an AppConfig into a running app.
+pub type PendingConfig = std::rc::Rc<std::cell::RefCell<Option<AppConfig>>>;
+
 pub struct ClockApp {
     clock: ClockSource,
     speed: f64,
@@ -22,6 +36,9 @@ pub struct ClockApp {
     layouts: [HandMagnets; 3],
     views: DebugViews,
     style: Style,
+    show_panel: bool,
+    /// External config updates, drained each frame.
+    pending: Option<PendingConfig>,
     sim: Sim,
     /// Display time the sim has been stepped to.
     sim_time: f64,
@@ -37,6 +54,8 @@ impl ClockApp {
         style: Style,
         params: SimParams,
         specs: [LayoutSpec; 3],
+        show_panel: bool,
+        pending: Option<PendingConfig>,
     ) -> Self {
         let speed = clock.multiplier();
         let sim_time = clock.now();
@@ -47,11 +66,34 @@ impl ClockApp {
             layouts: build_layouts(&specs),
             views,
             style,
+            show_panel,
+            pending,
             sim: Sim::new(params),
             sim_time,
             fb: Framebuffer::new(8, 8),
             texture: None,
             dump_status: None,
+        }
+    }
+
+    /// Apply an externally pushed configuration, preserving particle state
+    /// (count changes go through Sim::set_count).
+    fn apply_config(&mut self, cfg: AppConfig) {
+        self.specs = cfg.specs;
+        self.layouts = build_layouts(&self.specs);
+        self.style = cfg.style;
+        self.show_panel = cfg.show_panel;
+        if (cfg.speed - self.clock.multiplier()).abs() > f64::EPSILON {
+            self.clock.set_multiplier(cfg.speed);
+        }
+        self.speed = cfg.speed;
+        let cur_count = self.sim.params.count;
+        self.sim.params = SimParams {
+            count: cur_count,
+            ..cfg.sim
+        };
+        if cfg.sim.count != cur_count {
+            self.sim.set_count(cfg.sim.count);
         }
     }
 
@@ -84,10 +126,8 @@ impl ClockApp {
             Err(e) => format!("dump failed: {e}"),
         });
     }
-}
 
-impl eframe::App for ClockApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn dev_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::right("dev")
             .resizable(false)
             .default_width(180.0)
@@ -267,6 +307,16 @@ impl eframe::App for ClockApp {
                         .text("stroke length"),
                 );
                 ui.checkbox(&mut self.style.show_hands, "show hands");
+                ui.horizontal(|ui| {
+                    ui.label("palette");
+                    egui::ComboBox::from_id_salt("palette")
+                        .selected_text(self.style.palette.name())
+                        .show_ui(ui, |ui| {
+                            for p in crate::render::Palette::ALL {
+                                ui.selectable_value(&mut self.style.palette, p, p.name());
+                            }
+                        });
+                });
                 let mut count = self.sim.params.count;
                 if ui
                     .add(
@@ -298,6 +348,22 @@ impl eframe::App for ClockApp {
                     ui.label(status.clone());
                 }
             });
+    }
+}
+
+impl eframe::App for ClockApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let pushed = self
+            .pending
+            .as_ref()
+            .and_then(|pending| pending.borrow_mut().take());
+        if let Some(cfg) = pushed {
+            self.apply_config(cfg);
+        }
+
+        if self.show_panel {
+            self.dev_panel(ctx);
+        }
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(BG[0], BG[1], BG[2])))
