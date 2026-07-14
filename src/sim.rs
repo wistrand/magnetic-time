@@ -38,13 +38,22 @@ pub struct SimParams {
     pub chain_strength: f64,
     /// |B| at which induced moments saturate; chaining fades below this.
     pub b_sat: f64,
+    /// Chain bead spacing, dial units: the pair attraction turns off below
+    /// this distance and soft-core repulsion sets the equilibrium there.
+    pub chain_spacing: f64,
+    /// Chain pair-force cutoff distance, dial units. Also the drag-coupling
+    /// kernel radius, and it sizes the neighbor search.
+    pub chain_range: f64,
+    /// 0..=1: how much the spacing floor shrinks for fully magnetized pairs.
+    /// Real chains compress in stronger fields; 0 = fixed spacing.
+    pub chain_compress: f64,
+    /// 0..=1: XSPH-style velocity smoothing toward the neighborhood mean.
+    /// Models short-range momentum exchange through the liquid; clusters move
+    /// cohesively and moving magnets entrain nearby particles. 0 = off.
+    pub drag_coupling: f64,
     pub seed: u64,
 }
 
-/// Chain interaction range, in units of repulsion_radius. Inside CHAIN_MIN
-/// the pair force is off and soft-core repulsion sets the bead spacing.
-const CHAIN_MIN: f64 = 0.8;
-const CHAIN_CUT: f64 = 1.9;
 /// Cap on the summed chain velocity per particle, units/s (stability).
 const CHAIN_SPEED_CAP: f64 = 0.12;
 /// Max chain pair contributions per particle per step; in a dense clump the
@@ -65,6 +74,13 @@ impl Default for SimParams {
             repulsion_strength: 0.025,
             chain_strength: 0.01,
             b_sat: 3.0,
+            // Spacing/range/compress/coupling defaults reproduce the pre-
+            // parameterized behavior exactly (0.8 and 1.9 x repulsion_radius,
+            // no compression, no coupling), preserving the rings preset.
+            chain_spacing: 0.0096,
+            chain_range: 0.0228,
+            chain_compress: 0.0,
+            drag_coupling: 0.0,
             seed: 1,
         }
     }
@@ -181,6 +197,8 @@ pub struct Sim {
     pub pos: Vec<Vec2>,
     /// Last step's velocities, kept for the velocity debug view.
     pub vel: Vec<Vec2>,
+    /// Scratch buffer for the drag-coupling velocity smoothing pass.
+    vel_smooth: Vec<Vec2>,
     /// Per-particle field samples from the last step.
     pub field: Vec<FieldSample>,
     /// Steps taken; also the noise stream selector, so noise is deterministic
@@ -202,6 +220,7 @@ impl Sim {
         }
         Self {
             vel: vec![Vec2::ZERO; params.count],
+            vel_smooth: vec![Vec2::ZERO; params.count],
             field: vec![FieldSample::default(); params.count],
             step_index: 0,
             hash: SpatialHash::new(params.repulsion_radius),
@@ -219,6 +238,7 @@ impl Sim {
         if n <= self.pos.len() {
             self.pos.truncate(n);
             self.vel.truncate(n);
+            self.vel_smooth.truncate(n);
             self.field.truncate(n);
             // The hash still holds dangling indices until the next step.
             self.hash.build(&self.pos);
@@ -228,6 +248,7 @@ impl Sim {
                 let r = self.rng.f64().sqrt() * DISH_R;
                 self.pos.push(Vec2::new(a.cos() * r, a.sin() * r));
                 self.vel.push(Vec2::ZERO);
+                self.vel_smooth.push(Vec2::ZERO);
                 self.field.push(FieldSample::default());
             }
         }
@@ -242,7 +263,14 @@ impl Sim {
         self.hash.build(&self.pos);
         let r_rep = p.repulsion_radius;
         let chains = p.chain_strength > 0.0;
-        let (chain_min, chain_cut) = (CHAIN_MIN * r_rep, CHAIN_CUT * r_rep);
+        let coupling = p.drag_coupling > 0.0;
+        // Neighborhood must cover the widest active interaction.
+        let range = if chains || coupling {
+            p.chain_range.max(r_rep)
+        } else {
+            r_rep
+        };
+        let k_cells = ((range / r_rep).ceil() as i32).clamp(1, 4);
 
         // Pass 1: field samples. One B eval gives the induced moment
         // (superparamagnetic beads align with the local field, saturating at
@@ -284,22 +312,27 @@ impl Sim {
             let mut rep = Vec2::ZERO;
             let mut chain_v = Vec2::ZERO;
             let mut pairs = 0u32;
-            let k = if chains { 2 } else { 1 };
-            hash.for_near(pos, k, |j| {
+            hash.for_near(pos, k_cells, |j| {
                 if j == i {
                     return;
                 }
                 let d = pos - positions[j];
                 let dist = d.len();
-                if dist <= 1e-9 || dist >= chain_cut {
+                if dist <= 1e-9 || dist >= range {
                     return;
                 }
                 if dist < r_rep {
                     rep += (d / dist) * (1.0 - dist / r_rep);
                 }
-                if chains && dist >= chain_min && pairs < CHAIN_MAX_NEIGHBORS {
+                if chains && dist < p.chain_range && pairs < CHAIN_MAX_NEIGHBORS {
                     let w = wi * field[j].w;
                     if w < 1e-3 {
+                        return;
+                    }
+                    // Attraction floor: bead spacing, tightened for strongly
+                    // magnetized pairs (field-dependent chain compression).
+                    let floor = p.chain_spacing * (1.0 - p.chain_compress * w);
+                    if dist < floor {
                         return;
                     }
                     pairs += 1;
@@ -333,6 +366,39 @@ impl Sim {
 
             *vel = v;
         });
+
+        // Pass 2.5: drag coupling (XSPH velocity smoothing). Each particle's
+        // velocity moves toward the kernel-weighted mean of its neighbors',
+        // modeling momentum exchange through the liquid.
+        if coupling {
+            let (positions, hash, vel) = (&self.pos, &self.hash, &self.vel);
+            self.vel_smooth
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, out)| {
+                    let pos = positions[i];
+                    let vi = vel[i];
+                    let mut sum = Vec2::ZERO;
+                    let mut wsum = 0.0;
+                    hash.for_near(pos, k_cells, |j| {
+                        if j == i {
+                            return;
+                        }
+                        let dist = (pos - positions[j]).len();
+                        if dist < range {
+                            let w = 1.0 - dist / range;
+                            sum += (vel[j] - vi) * w;
+                            wsum += w;
+                        }
+                    });
+                    *out = if wsum > 0.0 {
+                        vi + sum * (p.drag_coupling / wsum)
+                    } else {
+                        vi
+                    };
+                });
+            std::mem::swap(&mut self.vel, &mut self.vel_smooth);
+        }
 
         // Pass 3: integrate.
         let dt = p.dt;
@@ -370,13 +436,14 @@ impl Sim {
     /// Pairs currently within chain interaction range (both magnetized),
     /// for the chains debug view.
     pub fn chain_bonds(&self) -> Vec<(Vec2, Vec2)> {
-        let cut = CHAIN_CUT * self.params.repulsion_radius;
+        let cut = self.params.chain_range;
+        let k = ((cut / self.params.repulsion_radius).ceil() as i32).clamp(1, 4);
         let mut out = Vec::new();
         for i in 0..self.pos.len() {
             if self.field[i].w < 0.15 {
                 continue;
             }
-            self.hash.for_near(self.pos[i], 2, |j| {
+            self.hash.for_near(self.pos[i], k, |j| {
                 if j <= i || j >= self.pos.len() || self.field[j].w < 0.15 {
                     return;
                 }

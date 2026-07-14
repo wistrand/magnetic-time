@@ -33,6 +33,8 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --particles N --seed N --size PX --stroke-len F
                                     #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
                                     #   --strengths F (one value, or hour,minute,second)
+                                    #   --chain-strength F --chain-spacing F --chain-range F
+                                    #   --chain-compress F --drag F
                                     #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
                                     #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
 cargo check                         # compile check; do not run cargo test

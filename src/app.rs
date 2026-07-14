@@ -246,6 +246,22 @@ impl eframe::App for ClockApp {
                             .logarithmic(true)
                             .text("chain threshold |B|"),
                     );
+                    ui.add(
+                        egui::Slider::new(&mut p.chain_spacing, 0.002..=0.04)
+                            .text("chain spacing"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.chain_range, 0.005..=0.06)
+                            .text("chain range"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.chain_compress, 0.0..=1.0)
+                            .text("chain compression"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.drag_coupling, 0.0..=1.0)
+                            .text("drag coupling"),
+                    );
                 }
                 ui.add(
                     egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0)

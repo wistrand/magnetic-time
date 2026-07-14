@@ -70,9 +70,13 @@ The owner wants visible chain textures, so chains are simulated, not faked:
 
 - Each particle is superparamagnetic: induced moment `m_i = c * B(x_i)`,
   capped at a saturation magnitude.
-- Particles within a cutoff radius interact with the point-dipole pair force:
+- Particles within `chain_range` interact with the point-dipole pair force:
   head-to-tail attraction along the local field direction, side-by-side
   repulsion. This is what strings beads into chains along field lines.
+- The attraction turns off below `chain_spacing`, which therefore sets the
+  bead spacing (chain texture scale). `chain_compress` shrinks that floor for
+  strongly magnetized pairs, so chains tighten near the magnets the way real
+  chains compress in stronger fields.
 - A soft-core repulsion at very short range gives particles finite size and
   prevents collapse into a point at field maxima.
 
@@ -92,6 +96,12 @@ or break when hands pass, and the owner asked for the real texture.
 
 ## Secondary effects
 
+- Drag coupling (`drag_coupling`, 0 = off): XSPH-style velocity smoothing
+  after the force pass; each particle's velocity blends toward the
+  kernel-weighted mean of its neighbors' within `chain_range`. Models
+  momentum exchange through the liquid: clusters move cohesively and sweeping
+  magnets produce coherent ripples instead of choppy fragments. This is the
+  approximation of inter-particle hydrodynamics; there is still no bulk flow.
 - Brownian noise: small random velocity per step, for texture and to break
   symmetry. Deterministic RNG seeded from a config value.
 - Stirring advection: a moving hand drags nearby liquid. Modeled as a

@@ -25,8 +25,7 @@ struct Options {
     speed: f64,
     views: DebugViews,
     style: render::Style,
-    particles: usize,
-    seed: u64,
+    sim: sim::SimParams,
     magnets: [field::LayoutSpec; 3],
 }
 
@@ -41,8 +40,7 @@ impl Default for Options {
             speed: 1.0,
             views: DebugViews::default(),
             style: render::Style::default(),
-            particles: sim::SimParams::default().count,
-            seed: sim::SimParams::default().seed,
+            sim: sim::SimParams::default(),
             magnets: field::default_specs(),
         }
     }
@@ -53,6 +51,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--view field,quiver,dipoles,velocity,hash]
                      [--particles N] [--seed N] [--stroke-len F]
                      [--hide-hands | --show-hands]  (default: hidden)
+                     [--chain-strength F] [--chain-spacing F] [--chain-range F]
+                     [--chain-compress F] [--drag F]
                      [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
                      one value applies to all hands
                      [--strengths HOUR,MINUTE,SECOND]  per-magnet moment scale;
@@ -134,14 +134,39 @@ fn parse_args() -> Result<Options, String> {
             }
             "--view" => opts.views = DebugViews::parse(&value("--view", &mut args)?)?,
             "--particles" => {
-                opts.particles = value("--particles", &mut args)?
+                opts.sim.count = value("--particles", &mut args)?
                     .parse()
                     .map_err(|e| format!("--particles: {e}"))?
             }
             "--seed" => {
-                opts.seed = value("--seed", &mut args)?
+                opts.sim.seed = value("--seed", &mut args)?
                     .parse()
                     .map_err(|e| format!("--seed: {e}"))?
+            }
+            "--chain-strength" => {
+                opts.sim.chain_strength = value("--chain-strength", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--chain-strength: {e}"))?
+            }
+            "--chain-spacing" => {
+                opts.sim.chain_spacing = value("--chain-spacing", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--chain-spacing: {e}"))?
+            }
+            "--chain-range" => {
+                opts.sim.chain_range = value("--chain-range", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--chain-range: {e}"))?
+            }
+            "--chain-compress" => {
+                opts.sim.chain_compress = value("--chain-compress", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--chain-compress: {e}"))?
+            }
+            "--drag" => {
+                opts.sim.drag_coupling = value("--drag", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--drag: {e}"))?
             }
             "--magnets" => opts.magnets = parse_magnets(&value("--magnets", &mut args)?)?,
             "--strengths" => strengths = Some(parse_strengths(&value("--strengths", &mut args)?)?),
@@ -176,12 +201,7 @@ fn parse_args() -> Result<Options, String> {
 fn run_headless(opts: &Options) -> Result<(), String> {
     let start = opts.time.unwrap_or_else(|| ClockSource::wall(1.0).now());
     let layouts = field::build_layouts(&opts.magnets);
-    let params = sim::SimParams {
-        count: opts.particles,
-        seed: opts.seed,
-        ..Default::default()
-    };
-    let mut particle_sim = sim::Sim::new(params);
+    let mut particle_sim = sim::Sim::new(opts.sim);
     let t = particle_sim.advance(&layouts, start, opts.sim_seconds);
     let sources = field::FieldSources::at_time(&layouts, t);
     let mut fb = render::Framebuffer::new(opts.size, opts.size);
@@ -232,16 +252,11 @@ fn main() -> ExitCode {
         "magnetic-time",
         native_options,
         Box::new(move |_cc| {
-            let params = sim::SimParams {
-                count: opts.particles,
-                seed: opts.seed,
-                ..Default::default()
-            };
             Ok(Box::new(app::ClockApp::new(
                 clock,
                 opts.views,
                 opts.style,
-                params,
+                opts.sim,
                 opts.magnets,
             )))
         }),
