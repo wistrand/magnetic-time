@@ -16,13 +16,59 @@ const TAU: f64 = std::f64::consts::TAU;
 
 pub type Color = [u8; 4];
 
-pub const BG: Color = [16, 18, 26, 255];
-const DIAL: Color = [24, 27, 38, 255];
-const RIM: Color = [90, 96, 120, 255];
-const TICK_MAJOR: Color = [185, 190, 205, 255];
-const TICK_MINOR: Color = [105, 110, 130, 255];
-const HAND: Color = [225, 228, 238, 255];
-const HAND_SECOND: Color = [225, 75, 60, 255];
+/// Default background (the original dark look).
+pub const DEFAULT_BG: [u8; 3] = [16, 18, 26];
+
+/// Face colors derived from the background so any bg works: contrast colors
+/// lerp toward white on dark backgrounds and toward black on light ones.
+/// `dark` also selects the particle blend mode (additive glow vs subtractive
+/// ink).
+struct Theme {
+    bg: Color,
+    dial: Color,
+    rim: Color,
+    tick_major: Color,
+    tick_minor: Color,
+    hand: Color,
+    second: Color,
+    dark: bool,
+}
+
+impl Theme {
+    fn from_bg(bg: [u8; 3]) -> Self {
+        let lum = 0.2126 * bg[0] as f32 + 0.7152 * bg[1] as f32 + 0.0722 * bg[2] as f32;
+        let dark = lum < 128.0;
+        let target = if dark { 255.0 } else { 0.0 };
+        let toward = |t: f32| -> Color {
+            let c = bg.map(|v| (v as f32 + (target - v as f32) * t) as u8);
+            [c[0], c[1], c[2], 255]
+        };
+        Self {
+            bg: [bg[0], bg[1], bg[2], 255],
+            dial: toward(0.05),
+            rim: toward(0.35),
+            tick_major: toward(0.68),
+            tick_minor: toward(0.38),
+            hand: toward(0.88),
+            second: if dark {
+                [225, 75, 60, 255]
+            } else {
+                [195, 40, 30, 255]
+            },
+            dark,
+        }
+    }
+}
+
+/// Parse "rrggbb" or "#rrggbb" into a color.
+pub fn parse_color(s: &str) -> Result<[u8; 3], String> {
+    let hex = s.trim_start_matches('#');
+    if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("bad color '{s}', expected rrggbb hex"));
+    }
+    let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap();
+    Ok([byte(0), byte(2), byte(4)])
+}
 const QUIVER: Color = [80, 200, 255, 255];
 const POLE_N: Color = [235, 70, 70, 255];
 const POLE_S: Color = [70, 110, 245, 255];
@@ -76,14 +122,26 @@ impl Palette {
         }
     }
 
-    /// Stroke color at full magnetization.
-    fn hot(self) -> [u8; 3] {
-        match self {
-            Palette::Ice => [230, 240, 255],
-            Palette::Ember => [255, 235, 190],
-            Palette::Emerald => [225, 255, 235],
-            Palette::Violet => [245, 225, 255],
-            Palette::Mono => [255, 255, 255],
+    /// Stroke color at full magnetization. On dark backgrounds strokes glow
+    /// toward near-white; on light ones they deepen toward a dark saturated
+    /// tone (near-white ink would be invisible).
+    fn hot(self, dark: bool) -> [u8; 3] {
+        if dark {
+            match self {
+                Palette::Ice => [230, 240, 255],
+                Palette::Ember => [255, 235, 190],
+                Palette::Emerald => [225, 255, 235],
+                Palette::Violet => [245, 225, 255],
+                Palette::Mono => [255, 255, 255],
+            }
+        } else {
+            match self {
+                Palette::Ice => [30, 60, 160],
+                Palette::Ember => [180, 60, 10],
+                Palette::Emerald => [10, 120, 60],
+                Palette::Violet => [110, 30, 170],
+                Palette::Mono => [20, 20, 25],
+            }
         }
     }
 }
@@ -97,6 +155,9 @@ pub struct Style {
     pub show_hands: bool,
     /// Particle color scale.
     pub palette: Palette,
+    /// Background color; all face colors and the particle blend mode derive
+    /// from it (see Theme).
+    pub bg: [u8; 3],
 }
 
 // Part of the owner-tuned "rings" preset: hands hidden, time read from the
@@ -107,6 +168,7 @@ impl Default for Style {
             stroke_len: 0.6,
             show_hands: false,
             palette: Palette::Ice,
+            bg: DEFAULT_BG,
         }
     }
 }
@@ -238,10 +300,29 @@ impl Framebuffer {
         self.pixels[i + 3] = 255;
     }
 
-    /// Soft additive dot: intensity `gain` at the center falling to 0 at
-    /// radius r. Overlapping dots build toward white (dense clumps saturate
-    /// instead of clipping).
-    pub fn dot_add(&mut self, cx: f64, cy: f64, r: f64, color: [u8; 3], gain: f32) {
+    /// Particle "ink" blend: additive glow on dark backgrounds, subtractive
+    /// ink on light ones (subtracting the color's complement tints the pixel
+    /// toward the color, darkening as it accumulates).
+    fn blend_ink(&mut self, x: i32, y: i32, color: [u8; 3], f: f32, dark: bool) {
+        if dark {
+            self.blend_add(x, y, color, f);
+            return;
+        }
+        if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 || f <= 0.0 {
+            return;
+        }
+        let i = ((y as u32 * self.width + x as u32) * 4) as usize;
+        for c in 0..3 {
+            let v = self.pixels[i + c] as f32 - (255.0 - color[c] as f32) * f.min(1.0);
+            self.pixels[i + c] = v.max(0.0) as u8;
+        }
+        self.pixels[i + 3] = 255;
+    }
+
+    /// Soft particle dot: intensity `gain` at the center falling to 0 at
+    /// radius r, blended with the ink mode (additive on dark, subtractive on
+    /// light). Overlapping dots saturate instead of clipping.
+    pub fn dot_ink(&mut self, cx: f64, cy: f64, r: f64, color: [u8; 3], gain: f32, dark: bool) {
         let xa = ((cx - r).floor() as i32).max(0);
         let ya = ((cy - r).floor() as i32).max(0);
         let xb = ((cx + r).ceil() as i32).min(self.width as i32 - 1);
@@ -250,14 +331,15 @@ impl Framebuffer {
             for x in xa..=xb {
                 let d = ((x as f64 + 0.5 - cx).powi(2) + (y as f64 + 0.5 - cy).powi(2)).sqrt();
                 let f = ((1.0 - d / r).max(0.0)) as f32 * gain;
-                self.blend_add(x, y, color, f);
+                self.blend_ink(x, y, color, f, dark);
             }
         }
     }
 
-    /// Soft additive stroke: a capsule with intensity `gain` on the axis
-    /// falling to 0 at half-width `hw`.
-    pub fn capsule_add(
+    /// Soft particle stroke: a capsule with intensity `gain` on the axis
+    /// falling to 0 at half-width `hw`, blended with the ink mode.
+    #[allow(clippy::too_many_arguments)]
+    pub fn capsule_ink(
         &mut self,
         ax: f64,
         ay: f64,
@@ -266,6 +348,7 @@ impl Framebuffer {
         hw: f64,
         color: [u8; 3],
         gain: f32,
+        dark: bool,
     ) {
         let pad = hw + 1.0;
         let xa = ((ax.min(bx) - pad).floor() as i32).max(0);
@@ -280,7 +363,7 @@ impl Framebuffer {
                 let t = (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0);
                 let d = ((px - ax - t * dx).powi(2) + (py - ay - t * dy).powi(2)).sqrt();
                 let f = ((1.0 - d / hw).max(0.0)) as f32 * gain;
-                self.blend_add(x, y, color, f);
+                self.blend_ink(x, y, color, f, dark);
             }
         }
     }
@@ -353,12 +436,13 @@ pub fn draw_clock(
     style: Style,
     sim: Option<&Sim>,
 ) {
-    fb.clear(BG);
+    let theme = Theme::from_bg(style.bg);
+    fb.clear(theme.bg);
     let m = Map::of(fb);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
 
-    fb.disc(cx, cy, r, DIAL);
-    fb.ring(cx, cy, r, r * 0.02, RIM);
+    fb.disc(cx, cy, r, theme.dial);
+    fb.ring(cx, cy, r, r * 0.02, theme.rim);
 
     // Ticks: 60 minor, every fifth major.
     for i in 0..60 {
@@ -368,7 +452,7 @@ pub fn draw_clock(
         } else {
             (false, 0.93, r * 0.004)
         };
-        let color = if major { TICK_MAJOR } else { TICK_MINOR };
+        let color = if major { theme.tick_major } else { theme.tick_minor };
         fb.capsule(
             cx + a.cos() * r * r0,
             cy + a.sin() * r * r0,
@@ -387,7 +471,7 @@ pub fn draw_clock(
         let angles = hands::angles(time_secs);
         let widths = [r * 0.030, r * 0.020, r * 0.007];
         let tails = [0.06, 0.06, 0.14];
-        let colors = [HAND, HAND, HAND_SECOND];
+        let colors = [theme.hand, theme.hand, theme.second];
         for i in 0..3 {
             let a = angles[i];
             fb.capsule(
@@ -399,8 +483,8 @@ pub fn draw_clock(
                 colors[i],
             );
         }
-        fb.disc(cx, cy, r * 0.028, HAND);
-        fb.disc(cx, cy, r * 0.014, HAND_SECOND);
+        fb.disc(cx, cy, r * 0.028, theme.hand);
+        fb.disc(cx, cy, r * 0.014, theme.second);
     }
 
     // Particles float above the hands.
@@ -409,10 +493,10 @@ pub fn draw_clock(
             for (a, b) in sim.chain_bonds() {
                 let (ax, ay) = m.px(a);
                 let (bx, by) = m.px(b);
-                fb.capsule_add(ax, ay, bx, by, 1.0, HASH_CELL, 0.5);
+                fb.capsule_ink(ax, ay, bx, by, 1.0, HASH_CELL, 0.5, theme.dark);
             }
         }
-        draw_particles(fb, &m, sim, views, style);
+        draw_particles(fb, &m, sim, views, style, theme.dark);
         if views.hash {
             draw_hash_cells(fb, &m, sim);
         }
@@ -518,17 +602,24 @@ fn draw_quiver(fb: &mut Framebuffer, m: &Map, sources: &FieldSources) {
     }
 }
 
-fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, style: Style) {
+fn draw_particles(
+    fb: &mut Framebuffer,
+    m: &Map,
+    sim: &Sim,
+    views: DebugViews,
+    style: Style,
+    dark: bool,
+) {
     let pr = (m.r * 0.006).max(1.3);
     let max_speed = sim.params.max_speed;
     let base = style.palette.base();
-    let hot = style.palette.hot();
+    let hot = style.palette.hot(dark);
     for i in 0..sim.pos.len() {
         let (x, y) = m.px(sim.pos[i]);
         if views.velocity {
             let t = (sim.vel[i].len() / max_speed).min(1.0) as f32;
             let c = heat_color(t);
-            fb.dot_add(x, y, pr, [c[0], c[1], c[2]], 0.9);
+            fb.dot_ink(x, y, pr, [c[0], c[1], c[2]], 0.9, dark);
             continue;
         }
         let w = sim.field[i].w as f32;
@@ -540,9 +631,9 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
             let hl = pr * (1.2 + 2.6 * w as f64) * style.stroke_len;
             let d = sim.field[i].dir;
             let (dx, dy) = (d.x * hl, d.y * hl);
-            fb.capsule_add(x - dx, y - dy, x + dx, y + dy, pr * 0.6, c, 0.4 + 0.35 * w);
+            fb.capsule_ink(x - dx, y - dy, x + dx, y + dy, pr * 0.6, c, 0.4 + 0.35 * w, dark);
         } else {
-            fb.dot_add(x, y, pr, base, 0.55);
+            fb.dot_ink(x, y, pr, base, 0.55, dark);
         }
     }
 }

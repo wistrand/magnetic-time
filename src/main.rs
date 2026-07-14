@@ -66,7 +66,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--sim-seconds N] [--size PX] [--speed N]
                      [--view field,quiver,dipoles,velocity,hash]
                      [--particles N] [--seed N] [--stroke-len F]
-                     [--palette ice|ember|emerald|violet|mono]
+                     [--palette ice|ember|emerald|violet|mono] [--bg RRGGBB]
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
@@ -179,6 +179,7 @@ fn parse_args() -> Result<Options, String> {
             "--palette" => {
                 opts.style.palette = render::Palette::parse(&value("--palette", &mut args)?)?
             }
+            "--bg" => opts.style.bg = render::parse_color(&value("--bg", &mut args)?)?,
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
             "--grad-check" => opts.grad_check = true,

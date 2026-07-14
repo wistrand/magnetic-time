@@ -18,7 +18,7 @@ const ensureWasm = () => (wasmInit ??= init());
 // "strengths" and "shapes" are re-applied after it.
 const ATTRS = [
   "magnets", "strengths", "shapes",
-  "particles", "speed", "stroke-len", "palette", "show-hands", "dev-panel",
+  "particles", "speed", "stroke-len", "palette", "bg", "show-hands", "dev-panel",
   "mobility", "max-speed", "noise", "repulsion",
   "chain-strength", "chain-spacing", "chain-range", "chain-compress", "drag",
 ];
@@ -84,6 +84,11 @@ class MagneticClock extends HTMLElement {
         }
         if (name === "palette") {
           h.set_palette(this.getAttribute(name));
+          continue;
+        }
+        if (name === "bg") {
+          h.set_bg(this.getAttribute(name));
+          this.style.background = "#" + this.getAttribute(name).replace("#", "");
           continue;
         }
         const v = num(name);

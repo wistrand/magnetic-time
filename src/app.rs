@@ -7,7 +7,7 @@ use crate::clock::{format_time, ClockSource};
 use crate::field::{
     build_layouts, FieldSources, HandMagnets, LayoutSpec, MagnetKind, SpecShape,
 };
-use crate::render::{draw_clock, DebugViews, Framebuffer, Style, BG};
+use crate::render::{draw_clock, DebugViews, Framebuffer, Style};
 use crate::sim::{Sim, SimParams};
 
 /// Wall-clock budget for catch-up physics per frame. If stepping to "now"
@@ -308,6 +308,10 @@ impl ClockApp {
                 );
                 ui.checkbox(&mut self.style.show_hands, "show hands");
                 ui.horizontal(|ui| {
+                    ui.label("background");
+                    ui.color_edit_button_srgb(&mut self.style.bg);
+                });
+                ui.horizontal(|ui| {
                     ui.label("palette");
                     egui::ComboBox::from_id_salt("palette")
                         .selected_text(self.style.palette.name())
@@ -365,8 +369,9 @@ impl eframe::App for ClockApp {
             self.dev_panel(ctx);
         }
 
+        let bg = self.style.bg;
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(BG[0], BG[1], BG[2])))
+            .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(bg[0], bg[1], bg[2])))
             .show(ctx, |ui| {
                 let avail = ui.available_rect_before_wrap();
                 let side_pts = avail.width().min(avail.height()).max(64.0);

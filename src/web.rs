@@ -127,6 +127,14 @@ impl WebHandle {
         self.push();
     }
 
+    /// Background color as "rrggbb" or "#rrggbb"; face colors and the
+    /// particle blend mode adapt to its brightness.
+    pub fn set_bg(&self, v: &str) -> Result<(), JsValue> {
+        self.config.borrow_mut().style.bg = crate::render::parse_color(v).map_err(js_err)?;
+        self.push();
+        Ok(())
+    }
+
     /// Particle color scale ("ice", "ember", "emerald", "violet", "mono").
     pub fn set_palette(&self, v: &str) -> Result<(), JsValue> {
         self.config.borrow_mut().style.palette =

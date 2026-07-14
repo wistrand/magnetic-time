@@ -29,8 +29,12 @@ the screen by construction, not by discipline.
   field direction (falls back to a dot where the field is weak). Strokes are
   what make chains read as chains; see
   [design-simulation.md](design-simulation.md).
-- Additive blending with a soft falloff; dense clumps saturate toward a
-  highlight color instead of clipping.
+- Particle blending adapts to the background (`Theme` in `src/render.rs`,
+  derived from `Style::bg` luminance): additive glow on dark backgrounds,
+  subtractive ink on light ones (subtracting the color's complement tints
+  toward the palette color and darkens as it accumulates). Palettes carry a
+  separate saturated color per mode; face colors lerp from the background
+  toward white or black. Debug overlays stay dark-tuned.
 - Never draw particles as per-particle egui shapes; the tessellator cannot
   handle tens of thousands of primitives per frame.
 
