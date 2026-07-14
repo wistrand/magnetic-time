@@ -314,9 +314,87 @@ impl FieldSources {
         b
     }
 
-    /// grad(|B|^2), central differences. The force on a superparamagnetic
-    /// particle is proportional to this.
+    /// Field and grad(|B|^2) in one sweep: accumulate B and the Jacobian
+    /// J_ik = dB_i/dr_k over all elements, then grad(|B|^2) = 2 J^T B. The
+    /// force on a superparamagnetic particle is proportional to the gradient.
+    /// Inside an element's r_min clamp, the derivative of the clamped field
+    /// form is used, matching `b()` exactly.
+    pub fn b_and_grad_b2(&self, p: Vec2) -> (Vec2, Vec2) {
+        let mut b = Vec2::ZERO;
+        // Jacobian accumulators; dipole terms are symmetric, the clamped
+        // forms are not, so keep all four.
+        let (mut jxx, mut jxy, mut jyx, mut jyy) = (0.0, 0.0, 0.0, 0.0);
+        for e in &self.elements {
+            match *e {
+                Element::Dipole { pos, moment, r_min } => {
+                    let dp = p - pos;
+                    let len = dp.len();
+                    if len >= r_min {
+                        let d = len;
+                        let n = dp / d;
+                        let nm = n.dot(moment);
+                        let d3 = d * d * d;
+                        b += (n * (3.0 * nm) - moment) / d3;
+                        // J = (3/d^4)[(n.m)I + n m^T + m n^T - 5(n.m) n n^T]
+                        let c = 3.0 / (d3 * d);
+                        jxx += c * (nm + 2.0 * n.x * moment.x - 5.0 * nm * n.x * n.x);
+                        jyy += c * (nm + 2.0 * n.y * moment.y - 5.0 * nm * n.y * n.y);
+                        let off =
+                            c * (n.x * moment.y + moment.x * n.y - 5.0 * nm * n.x * n.y);
+                        jxy += off;
+                        jyx += off;
+                    } else {
+                        // Clamped form: B = 3 dp (dp.m)/r_min^5 - m/r_min^3.
+                        let r3 = r_min * r_min * r_min;
+                        let r5 = r3 * r_min * r_min;
+                        let dm = dp.dot(moment);
+                        b += dp * (3.0 * dm / r5) - moment / r3;
+                        let c = 3.0 / r5;
+                        jxx += c * (dm + dp.x * moment.x);
+                        jyy += c * (dm + dp.y * moment.y);
+                        jxy += c * dp.x * moment.y;
+                        jyx += c * dp.y * moment.x;
+                    }
+                }
+                Element::Charge { pos, q, r_min } => {
+                    let dp = p - pos;
+                    let len = dp.len();
+                    if len >= r_min {
+                        let d = len;
+                        let n = dp / d;
+                        let qd3 = q / (d * d * d);
+                        b += dp * qd3;
+                        // J = (q/d^3)(I - 3 n n^T)
+                        jxx += qd3 * (1.0 - 3.0 * n.x * n.x);
+                        jyy += qd3 * (1.0 - 3.0 * n.y * n.y);
+                        let off = qd3 * (-3.0 * n.x * n.y);
+                        jxy += off;
+                        jyx += off;
+                    } else {
+                        // Clamped form: B = q dp / r_min^3, J = (q/r_min^3) I.
+                        let qr3 = q / (r_min * r_min * r_min);
+                        b += dp * qr3;
+                        jxx += qr3;
+                        jyy += qr3;
+                    }
+                }
+            }
+        }
+        let grad = Vec2::new(
+            2.0 * (b.x * jxx + b.y * jyx),
+            2.0 * (b.x * jxy + b.y * jyy),
+        );
+        (b, grad)
+    }
+
+    /// grad(|B|^2), analytic.
     pub fn grad_b2(&self, p: Vec2) -> Vec2 {
+        self.b_and_grad_b2(p).1
+    }
+
+    /// Central-difference reference for --grad-check; keep in sync with the
+    /// analytic version when adding element types.
+    pub fn grad_b2_numeric(&self, p: Vec2) -> Vec2 {
         let b2 = |q: Vec2| self.b(q).len_sq();
         Vec2::new(
             (b2(p + Vec2::new(GRAD_EPS, 0.0)) - b2(p - Vec2::new(GRAD_EPS, 0.0))) / (2.0 * GRAD_EPS),

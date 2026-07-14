@@ -27,6 +27,8 @@ struct Options {
     style: render::Style,
     sim: sim::SimParams,
     magnets: [field::LayoutSpec; 3],
+    /// Verify the analytic gradient against central differences and exit.
+    grad_check: bool,
 }
 
 impl Default for Options {
@@ -42,6 +44,7 @@ impl Default for Options {
             style: render::Style::default(),
             sim: sim::SimParams::default(),
             magnets: field::default_specs(),
+            grad_check: false,
         }
     }
 }
@@ -53,6 +56,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
+                     [--grad-check]  verify analytic field gradient, then exit
                      [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
                      one value applies to all hands
                      [--strengths HOUR,MINUTE,SECOND]  per-magnet moment scale;
@@ -178,6 +182,7 @@ fn parse_args() -> Result<Options, String> {
             }
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
+            "--grad-check" => opts.grad_check = true,
             "--help" | "-h" => return Err(USAGE.to_string()),
             other => return Err(format!("unknown argument '{other}'\n{USAGE}")),
         }
@@ -196,6 +201,40 @@ fn parse_args() -> Result<Options, String> {
         return Err("--headless requires --dump PATH".to_string());
     }
     Ok(opts)
+}
+
+/// Compare the analytic grad(|B|^2) against a central-difference reference
+/// at random dish points. Large outliers right at r_min clamp boundaries are
+/// expected (the numeric stencil straddles the kink; the analytic value is
+/// the correct one-sided derivative there).
+fn run_grad_check(opts: &Options) {
+    let layouts = field::build_layouts(&opts.magnets);
+    let t = opts.time.unwrap_or(10.0 * 3600.0 + 8.0 * 60.0 + 30.0);
+    let sources = field::FieldSources::at_time(&layouts, t);
+    let mut rng = sim::Rng::new(42);
+    let (mut max_rel, mut sum, mut bad) = (0.0f64, 0.0f64, 0u32);
+    const N: u32 = 20000;
+    for _ in 0..N {
+        let a = rng.f64() * std::f64::consts::TAU;
+        let r = rng.f64().sqrt() * 0.92;
+        let p = vec2::Vec2::new(a.cos() * r, a.sin() * r);
+        let ga = sources.b_and_grad_b2(p).1;
+        let gn = sources.grad_b2_numeric(p);
+        let denom = ga.len().max(gn.len()).max(1e-9);
+        let rel = (ga - gn).len() / denom;
+        sum += rel;
+        if rel > max_rel {
+            max_rel = rel;
+        }
+        if rel > 1e-2 {
+            bad += 1;
+        }
+    }
+    println!(
+        "grad-check: {N} points, mean rel err {:.2e}, max {:.2e}, >1% at {bad} points",
+        sum / N as f64,
+        max_rel
+    );
 }
 
 fn run_headless(opts: &Options) -> Result<(), String> {
@@ -227,6 +266,11 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if opts.grad_check {
+        run_grad_check(&opts);
+        return ExitCode::SUCCESS;
+    }
 
     if opts.headless {
         return match run_headless(&opts) {

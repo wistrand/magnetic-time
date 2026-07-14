@@ -9,9 +9,6 @@ use crate::vec2::Vec2;
 
 const TAU: f64 = std::f64::consts::TAU;
 
-/// Step for the forward-difference gradient of |B|^2.
-const GRAD_EPS: f64 = 1e-3;
-
 /// Dish radius in clock-face units; particles live inside this.
 pub const DISH_R: f64 = 0.92;
 
@@ -272,24 +269,21 @@ impl Sim {
         };
         let k_cells = ((range / r_rep).ceil() as i32).clamp(1, 4);
 
-        // Pass 1: field samples. One B eval gives the induced moment
-        // (superparamagnetic beads align with the local field, saturating at
-        // b_sat); two more give a forward-difference grad(|B|^2) for the
-        // magnetic pull, speed-capped. The cap is what makes the second hand
-        // outrun its particles (the comet trail).
+        // Pass 1: field samples. One analytic sweep gives B (for the induced
+        // moment: superparamagnetic beads align with the local field,
+        // saturating at b_sat) and grad(|B|^2) for the magnetic pull,
+        // speed-capped. The cap is what makes the second hand outrun its
+        // particles (the comet trail).
         self.pos
             .par_iter()
             .map(|&pos| {
-                let b = sources.b(pos);
-                let b2 = b.len_sq();
-                let gx = (sources.b(pos + Vec2::new(GRAD_EPS, 0.0)).len_sq() - b2) / GRAD_EPS;
-                let gy = (sources.b(pos + Vec2::new(0.0, GRAD_EPS)).len_sq() - b2) / GRAD_EPS;
-                let mut fv = Vec2::new(gx, gy) * p.mobility;
+                let (b, g) = sources.b_and_grad_b2(pos);
+                let mut fv = g * p.mobility;
                 let sp = fv.len();
                 if sp > p.max_speed {
                     fv = fv * (p.max_speed / sp);
                 }
-                let bl = b2.sqrt();
+                let bl = b.len();
                 FieldSample {
                     dir: if bl > 1e-12 { b / bl } else { Vec2::ZERO },
                     w: (bl / p.b_sat).min(1.0),

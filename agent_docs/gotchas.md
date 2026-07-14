@@ -61,6 +61,24 @@ lands, and add what implementation teaches.
 - When benchmarking, build first; `time cargo run` after an edit measures
   the compile, not the sim.
 
+## Findings from the analytic gradient
+
+- grad(|B|^2) is analytic (`FieldSources::b_and_grad_b2`: accumulate B and
+  the Jacobian in one sweep, gradient = 2 J^T B), replacing forward
+  differences. Verify with `--grad-check` after any field-element change; it
+  compares against central differences. Expect a small mean error and O(1)
+  outliers at r_min clamp kinks and very near magnets; those are the numeric
+  reference's error (stencil straddling the kink, truncation on 1/r^7
+  curvature), not the analytic value's.
+- The sim is neighbor-bound at the owner presets, not field-bound: at the
+  rings preset the chain/repulsion neighbor pass is ~3/4 of runtime, so the
+  analytic gradient bought only a few percent there. Particle density in
+  clumps drives cost; field-eval optimizations only pay in many-element or
+  sparse configs. Measure before optimizing further.
+- Removing the differencing error changed forces slightly; long runs diverge
+  in fine detail from pre-change dumps (chaotic system), same character.
+  One-time visual re-baseline, accepted 2026-07-14.
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears
