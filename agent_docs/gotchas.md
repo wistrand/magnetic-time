@@ -79,6 +79,21 @@ lands, and add what implementation teaches.
   in fine detail from pre-change dumps (chaotic system), same character.
   One-time visual re-baseline, accepted 2026-07-14.
 
+## Findings from the wasm port
+
+- The browser build is single-threaded: rayon compiles for wasm and falls
+  back to sequential execution. Particle count is reduced in the wasm entry
+  point (`main.rs`) to keep it real-time.
+- `std::time::Instant` panics on wasm32-unknown-unknown; all timing goes
+  through `web_time` (std passthrough on native). Never reintroduce
+  `std::time::Instant` in code shared with the browser build.
+- File I/O (`write_png`, headless, dump button) is cfg-gated to native.
+  Keep new fs/CLI code behind `#[cfg(not(target_arch = "wasm32"))]` and keep
+  `cargo check --target wasm32-unknown-unknown` green.
+- `wasm-bindgen-cli` must exactly match the wasm-bindgen crate version;
+  `scripts/build-web.sh` reads the version from the lockfile and installs to
+  match.
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears

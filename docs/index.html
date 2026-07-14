@@ -92,6 +92,10 @@
     <p class="tagline">A clock whose hands are magnets sweeping beneath a layer of magnetic particles.</p>
   </header>
 
+  <p style="text-align:center; margin-top:20px">
+    <a href="app/" style="display:inline-block; padding:10px 22px; border:1px solid var(--accent); border-radius:8px">Run it live in your browser</a>
+  </p>
+
   <figure class="hero">
     <img src="img/rings.png" alt="Clock face covered in concentric rings and spirals of white particle chains on a dark dial" width="800" height="800">
     <figcaption>The default preset. No hands are drawn; the time is whatever the particles say it is.</figcaption>
@@ -157,6 +161,10 @@
   </ul>
 
   <h2>Running it</h2>
+  <p>
+    <a href="app/">In the browser</a> (WebAssembly, single-threaded, reduced
+    particle count), or natively:
+  </p>
   <pre><code>cargo run --release</code></pre>
   <p>
     A dev panel exposes every tunable live: magnet layout, shape, and strength

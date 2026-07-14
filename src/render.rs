@@ -2,7 +2,9 @@
 //! both the interactive window and the headless dump draw through here, so
 //! dumped bitmaps are faithful to the screen (see CLAUDE.md invariants).
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::BufWriter;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 use crate::field::FieldSources;
@@ -535,6 +537,8 @@ fn draw_dipole_markers(fb: &mut Framebuffer, m: &Map, sources: &FieldSources) {
 }
 
 /// Write the framebuffer as a PNG, creating parent directories.
+/// Native only; the browser build has no filesystem.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn write_png(path: &Path, fb: &Framebuffer) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         if !dir.as_os_str().is_empty() {

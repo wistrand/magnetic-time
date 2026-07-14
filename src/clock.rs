@@ -1,9 +1,8 @@
 //! The single time source. All display time flows through `ClockSource`;
 //! nothing else may read wall time (see CLAUDE.md invariants).
 
-use std::time::Instant;
-
 use chrono::Timelike;
+use web_time::Instant;
 
 /// Display time in seconds since midnight, advancing at `multiplier` times
 /// real speed. Changing the multiplier rebases so display time is continuous.

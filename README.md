@@ -10,8 +10,10 @@ Native Rust application rendered with egui.
 
 ![The default preset: concentric particle rings on a dark dial](docs/img/rings.png)
 
-More screenshots and a longer description: [project page](https://wistrand.github.io/magnetic-time/)
-(source in [docs/](docs/), publishable via GitHub Pages).
+More screenshots, a longer description, and a live in-browser build (wasm):
+[project page](https://wistrand.github.io/magnetic-time/)
+(source in [docs/](docs/), publishable via GitHub Pages; rebuild the wasm app
+with `./scripts/build-web.sh`).
 
 ## Quick start
 

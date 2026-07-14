@@ -1,21 +1,19 @@
 //! Interactive eframe app: renders the shared framebuffer to a texture each
 //! frame, plus the dev side panel.
 
-use std::path::PathBuf;
-
 use eframe::egui;
 
 use crate::clock::{format_time, ClockSource};
 use crate::field::{
     build_layouts, FieldSources, HandMagnets, LayoutSpec, MagnetKind, SpecShape,
 };
-use crate::render::{draw_clock, write_png, DebugViews, Framebuffer, Style, BG};
+use crate::render::{draw_clock, DebugViews, Framebuffer, Style, BG};
 use crate::sim::{Sim, SimParams};
 
 /// Wall-clock budget for catch-up physics per frame. If stepping to "now"
 /// would take longer (huge speed multiplier or a stall), the particles skip
 /// the excess display time; the hands stay truthful to the clock.
-const STEP_BUDGET: std::time::Duration = std::time::Duration::from_millis(12);
+const STEP_BUDGET: web_time::Duration = web_time::Duration::from_millis(12);
 
 pub struct ClockApp {
     clock: ClockSource,
@@ -64,7 +62,7 @@ impl ClockApp {
         // Display time since last sim step, midnight wrap handled.
         let gap = (now - self.sim_time).rem_euclid(24.0 * 3600.0);
         let steps = (gap / dt) as usize;
-        let start = std::time::Instant::now();
+        let start = web_time::Instant::now();
         for _ in 0..steps {
             if start.elapsed() > STEP_BUDGET {
                 // Out of budget: drop the remaining display time.
@@ -78,9 +76,10 @@ impl ClockApp {
         self.sim_time = self.sim_time.rem_euclid(24.0 * 3600.0);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn dump_frame(&mut self) {
-        let path = PathBuf::from("docs/debug/interactive.png");
-        self.dump_status = Some(match write_png(&path, &self.fb) {
+        let path = std::path::PathBuf::from("docs/debug/interactive.png");
+        self.dump_status = Some(match crate::render::write_png(&path, &self.fb) {
             Ok(()) => format!("wrote {}", path.display()),
             Err(e) => format!("dump failed: {e}"),
         });
@@ -291,6 +290,7 @@ impl eframe::App for ClockApp {
                 ui.checkbox(&mut self.views.hash, "hash occupancy");
                 ui.checkbox(&mut self.views.chains, "chain bonds");
                 ui.separator();
+                #[cfg(not(target_arch = "wasm32"))]
                 if ui.button("dump frame").clicked() {
                     self.dump_frame();
                 }

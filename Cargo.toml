@@ -5,9 +5,19 @@ edition = "2021"
 
 [dependencies]
 eframe = "0.32"
-chrono = "0.4"
+# wasmbind: read the browser clock on wasm.
+chrono = { version = "0.4", features = ["wasmbind"] }
 png = "0.17"
+# Falls back to sequential execution on wasm (no threads there).
 rayon = "1"
+# std::time::Instant panics on wasm; this is a drop-in that uses
+# performance.now() there and std elsewhere.
+web-time = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Window", "Document", "HtmlCanvasElement", "console"] }
+console_error_panic_hook = "0.1"
 
 # Pixel loops are unusable at opt-level 0.
 [profile.dev]

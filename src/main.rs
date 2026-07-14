@@ -1,3 +1,7 @@
+// CLI parsing, headless mode, and grad-check are native-only; their helpers
+// are intentionally unused in the browser build.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
 mod app;
 mod clock;
 mod field;
@@ -6,12 +10,17 @@ mod render;
 mod sim;
 mod vec2;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
 use std::process::ExitCode;
 
+#[cfg(not(target_arch = "wasm32"))]
 use clock::ClockSource;
+#[cfg(not(target_arch = "wasm32"))]
 use render::DebugViews;
 
+#[cfg(not(target_arch = "wasm32"))]
 struct Options {
     headless: bool,
     /// Start time, seconds since midnight. None = wall clock.
@@ -31,6 +40,7 @@ struct Options {
     grad_check: bool,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for Options {
     fn default() -> Self {
         Self {
@@ -49,6 +59,7 @@ impl Default for Options {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM:SS]
                      [--sim-seconds N] [--size PX] [--speed N]
                      [--view field,quiver,dipoles,velocity,hash]
@@ -66,6 +77,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      one value applies to all hands";
 
 /// Parse --magnets: "tip,alt:6,tip" per hand, or one spec for all hands.
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_magnets(s: &str) -> Result<[field::LayoutSpec; 3], String> {
     let parts: Vec<&str> = s.split(',').collect();
     match parts.len() {
@@ -83,6 +95,7 @@ fn parse_magnets(s: &str) -> Result<[field::LayoutSpec; 3], String> {
 }
 
 /// Parse --shapes: one shape for all hands or "point,disc:0.05,rect:1x0.03".
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_shapes(s: &str) -> Result<[field::SpecShape; 3], String> {
     let parts: Vec<&str> = s.split(',').collect();
     match parts.len() {
@@ -97,6 +110,7 @@ fn parse_shapes(s: &str) -> Result<[field::SpecShape; 3], String> {
 }
 
 /// Parse --strengths: "1.5" for all hands or "2,1,0.5" per hand.
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_strengths(s: &str) -> Result<[f64; 3], String> {
     let vals: Result<Vec<f64>, _> = s.split(',').map(str::parse::<f64>).collect();
     let vals = vals.map_err(|e| format!("--strengths: {e}"))?;
@@ -107,6 +121,7 @@ fn parse_strengths(s: &str) -> Result<[f64; 3], String> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_args() -> Result<Options, String> {
     let mut opts = Options::default();
     // Applied after the loop so --strengths/--shapes work in any flag order.
@@ -203,6 +218,7 @@ fn parse_args() -> Result<Options, String> {
     Ok(opts)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Compare the analytic grad(|B|^2) against a central-difference reference
 /// at random dish points. Large outliers right at r_min clamp boundaries are
 /// expected (the numeric stencil straddles the kink; the analytic value is
@@ -237,6 +253,7 @@ fn run_grad_check(opts: &Options) {
     );
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn run_headless(opts: &Options) -> Result<(), String> {
     let start = opts.time.unwrap_or_else(|| ClockSource::wall(1.0).now());
     let layouts = field::build_layouts(&opts.magnets);
@@ -258,6 +275,7 @@ fn run_headless(opts: &Options) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> ExitCode {
     let opts = match parse_args() {
         Ok(o) => o,
@@ -311,4 +329,47 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Browser entry point: no CLI, preset defaults, reduced particle count
+/// (the sim runs single-threaded on wasm).
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    use eframe::wasm_bindgen::JsCast;
+
+    console_error_panic_hook::set_once();
+    wasm_bindgen_futures::spawn_local(async {
+        let document = web_sys::window()
+            .expect("no window")
+            .document()
+            .expect("no document");
+        let canvas = document
+            .get_element_by_id("clock_canvas")
+            .expect("no element with id clock_canvas")
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .expect("clock_canvas is not a canvas");
+
+        let params = sim::SimParams {
+            count: 15000,
+            ..Default::default()
+        };
+        let result = eframe::WebRunner::new()
+            .start(
+                canvas,
+                eframe::WebOptions::default(),
+                Box::new(move |_cc| {
+                    Ok(Box::new(app::ClockApp::new(
+                        clock::ClockSource::wall(1.0),
+                        render::DebugViews::default(),
+                        render::Style::default(),
+                        params,
+                        field::default_specs(),
+                    )))
+                }),
+            )
+            .await;
+        if let Err(e) = result {
+            web_sys::console::error_1(&format!("failed to start eframe: {e:?}").into());
+        }
+    });
 }

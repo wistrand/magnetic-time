@@ -21,6 +21,8 @@ Phases 1-4 of [agent_docs/plan.md](agent_docs/plan.md) are built; tuning
 | `src/`        | application code                                    |
 | `agent_docs/` | plan, design decisions, gotchas (linked below)      |
 | `docs/`       | GitHub Pages site (index.html, img/), committed     |
+| `scripts/`    | owner-run helper scripts (web build)                |
+| `docs/app/`   | wasm build of the clock (pkg/ from build-web.sh)    |
 | `docs/debug/` | dumped debug bitmaps, disposable, gitignored        |
 
 ## Commands
@@ -40,6 +42,9 @@ magnetic-time --grad-check          # verify analytic field gradient vs numeric;
                                     #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
                                     #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
 cargo check                         # compile check; do not run cargo test
+cargo check --target wasm32-unknown-unknown   # browser build must stay green
+./scripts/build-web.sh              # build wasm into docs/app/pkg/ (installs a
+                                    # matching wasm-bindgen-cli; owner runs this)
 ```
 
 Headless flags are the planned interface; keep this block in sync when the CLI
