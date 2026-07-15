@@ -2,6 +2,12 @@
 
 > Public writeup of these results: `docs/banding.html` (keep it in sync if
 > results here change).
+>
+> RESOLVED 2026-07-15: the band spacing mechanism is tidal fragmentation
+> of the infalling chainlet medium; see the mechanism entries at the end
+> of finding 9 and `scripts/model1d.py`. This file is a chronological lab
+> record, including two retracted claims; read the end of each finding for
+> current status.
 
 Why particles form bands running perpendicular to the chain direction, as
 observed in dumps and interactively (2026-07). Mechanism analysis verified
@@ -469,16 +475,46 @@ creep, step budget); the dumps under `docs/debug/` are the records.
    near proportional, and the first pooled ring sits at 57 px at ALL three
    clamps. MIN_DIST is not the seed.
 
-   FINAL STATUS: every constant, parameter, configuration, and
-   discretization in the simulation has now been tested. The scale
-   (first ring ~57 px ~ 0.12 u, gaps ~30-40 px) is genuinely emergent
-   from the collective condensation dynamics; no single knob sets it.
-   Remaining roads: the mechanism movie (track proto-ring consolidation
-   t=5..90 s at fine dt with pooled profiles) and theory (1D
-   transport-aggregation stability analysis of the exact model). The
-   weak residual trends (clamp ^0.2, mobility ^-0.17) might combine into
-   a compound scale, but establishing that needs the ~16-seed pooled
-   methodology per point.
+   MECHANISM RESOLVED (2026-07-15, 1D reduction + live observation):
+   tidal fragmentation of the infalling chainlet medium.
+
+   - Theory: the drift steepens inward (v ~ 1/r^5 uncapped), so infalling
+     material is tidally stretched; chain cohesion resists. Balancing
+     stretch rate against the pair force's closing speed gives the
+     fragment scale delta* ~ (2*cs*r_rep^4 / (mu*|dv/dr|))^(1/5).
+     Plugging in actual values gives 17-31 px in the ring zone: the right
+     magnitude. The FIFTH ROOT (from the quartic force law) compresses
+     every parameter's influence to exponents <= 0.2, which is why the
+     scale survived every sweep: it is not universal, it is maximally
+     insensitive. It also post-dicts the surviving residuals
+     (mobility^-0.17 measured vs -0.2 predicted; clamp/cs near-nulls).
+   - 1D numerical model (`scripts/model1d.py`, exact force laws, no
+     transverse physics): reproduces the spacing (median ~31 px baseline)
+     AND the insensitivity (31-47 px across cs x16, mobility x4, noise
+     x4, density /2, range x2). The spacing mechanism is radial;
+     zippering builds the bands' substance but not their spacing.
+   - Live confirmation (owner): raising strength + mobility makes the
+     stretching watchable; inner gaps visibly wider than outer, as
+     predicted (rings accelerate apart as they fall). The existing
+     baseline pooled data already shows the gradient (gaps 35 px inner,
+     23 px outer) and had gone unremarked.
+
+   Final comparisons (2026-07-15, `scripts/model1d.py`, 10-20 seeds):
+
+   - Gap-vs-radius gradient: REPRODUCED. 1D baseline gives inner gaps
+     (r < 100 px) median 66 px vs outer 39 px; the hot config (q x2,
+     mobility x4, the owner's live protocol) amplifies it to 104 vs 46.
+     Matches the 2D pooled data (35 inner vs 23 outer) and the live
+     observation. Post-formation kinematic stretching dominates the
+     formation profile, so gaps widen inward.
+   - dt bias: PARTIAL. The 1D model converges at the same threshold
+     (dt <= 1/120) but its coarse-dt error has the OPPOSITE sign (larger
+     spacing at dt=1/30, 66 vs 38 px). The 2D bias direction therefore
+     comes from physics outside the radial reduction (transverse/
+     zippering dynamics); open detail, does not affect the mechanism.
+
+   The public writeup (docs/banding.html) explains the full mechanism
+   with a tidal-fragmentation diagram.
 
    Also eliminated at converged dt: pole-face width (39.8 / 42.7 / 39.5
    across 4x), magnet shape (point dipole 35.7 vs bar 42, within scatter),

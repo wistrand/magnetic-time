@@ -66,7 +66,7 @@ lands.
 - [agent_docs/design-simulation.md](agent_docs/design-simulation.md): physics model: field elements, overdamped particles, chains, drag coupling, pointer magnet. Read before touching sim code.
 - [agent_docs/design-rendering.md](agent_docs/design-rendering.md): pixel-buffer rendering, themes/palettes, debug views, headless PNG dump.
 - [agent_docs/gotchas.md](agent_docs/gotchas.md): traps and decision history (numerics, egui, wasm, presets).
-- [agent_docs/research-chain-banding.md](agent_docs/research-chain-banding.md): why bands form perpendicular to chains (zippering), knobs, literature, proposed experiments.
+- [agent_docs/research-chain-banding.md](agent_docs/research-chain-banding.md): band physics, resolved: zippering builds the walls, tidal fragmentation spaces them; experiments, retractions, instruments.
 
 ## Invariants
 
