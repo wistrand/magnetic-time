@@ -398,22 +398,32 @@ creep, step budget); the dumps under `docs/debug/` are the records.
    work should use dt <= 1/120 from now on.
 
    OWNER THEORY, TESTED 2026-07-15: the bands are a standing balance
-   between noise and particle transport speed. Decisive sweeps at
-   converged dt (1/120), hour pole, 3 seeds (scatter ~+-30%, treat
-   exponents as rough):
+   between noise and particle transport speed. Status after full testing:
+   UNRESOLVED, and an earlier claim of directional support is RETRACTED.
 
-   - noise 0.002 / 0.008 / 0.032 -> spacing 35.5 / 42.0 / 61.2 px.
-     Monotone INCREASE. At default dt this was flat, so integrator error
-     masks the thermal-noise dependence there.
-   - mobility 1e-8 / 2e-8 / 4e-8 -> 66.7 / 42.0 / 37.3 px. Monotone
-     DECREASE (mobility sets the uncapped drift at ring radii; this is
-     why max_speed nulls never meant anything about transport).
-   - VERDICT: supported in direction. Spacing grows with noise and shrinks
-     with transport speed: a diffusion-vs-drift balance length. The
-     precise law is open (rough fit lambda ~ noise^0.2 * mobility^-0.4;
-     needs many-seed sweeps), and the dt bias direction (coarser dt ->
-     SMALLER spacing) is opposite to what "integrator error acts as extra
-     noise" would give, so the dt mechanism is a separate open point.
+   - Initial 3-seed sweeps at converged dt showed spacing rising with
+     noise (35.5/42.0/61.2) and falling with mobility (66.7/42.0/37.3),
+     and were reported as directional confirmation. WRONG CALL: with a
+     4th seed, denser grids (5 noise points, 4 mobility points), and a
+     missed-ring-robust autocorrelation estimator, both trends dissolve:
+     fitted exponents noise +0.04 +- 0.09, mobility -0.17 +- 0.08, and
+     per-condition scatter (25..75 px between seeds) exceeds all
+     between-condition differences.
+   - Estimator hazard found: peak-difference spacing is biased UP in
+     weak-ordering regimes (faint rings -> missed peaks -> doubled gaps).
+     The conditions that looked "elevated" (high noise, low mobility) are
+     exactly the weak-ring regimes; the apparent trends were probably
+     detectability artifacts.
+   - The single-run wavelength is not a sharp observable (+-50%
+     realization scatter). But ring POSITIONS are substantially
+     seed-anchored: pooling radial profiles over seeds before peak
+     detection recovers consistent peaks (57/92/115 px across different
+     conditions). Pooled-profile spacing is the recommended instrument
+     for any future test; a definitive exponent measurement needs ~16
+     seeds per condition (~8 min CPU per condition at 12k, dt 1/120).
+   - The theory itself is neither supported nor refuted by current data.
+     The dt effect (coarser -> smaller spacing) also needs re-examination
+     with the pooled instrument before being trusted.
 
    Also eliminated at converged dt: pole-face width (39.8 / 42.7 / 39.5
    across 4x), magnet shape (point dipole 35.7 vs bar 42, within scatter),
