@@ -180,9 +180,28 @@ isotropic ring); that is an analysis script, not a sim change.
    byte-identical, by construction. Chaos: same coarse pattern via different
    micro-history diverges (documented when the gradient scheme changed).
    Material memory: the dish encodes drive history (wake bands = recent
-   laps; hysteresis = parameter path). Quantifiable follow-up: memory
-   capacity and decay, i.e. how many laps back are reconstructable from one
-   frame before coarsening erases them.
+   laps; morphology differences from experiment 2).
+
+   Ghost decay: RUN 2026-07-15. Protocol: form bands (180 s at
+   chain_strength 0.06), erase (switch to 0), and at post-erasure times
+   T = 45..720 s compare the smoothed radial density profile around the
+   hour pole against a same-seed never-ordered control; ghost signal =
+   normalized RMS profile difference, computed by
+   `scripts/ghost_decay.py` (pairs of annealed/control dumps).
+
+   Results: ghost = 0.206, 0.184, 0.165, 0.149, 0.119 at T = 45, 90, 180,
+   360, 720 s; seed-only baseline = 0.044. So the erased pattern is still
+   ~2.7x above the noise floor after 12 minutes. Decay is slow and closer
+   to a power law (t^-0.2 fits the sampled range) than exponential; the
+   sampled window cannot distinguish, so time-to-floor extrapolates
+   anywhere from ~30 min (exponential) to ~a day (power law). Physics
+   cross-check supports the long tail: erasure is noise diffusion across
+   the ghost length scale, tau ~ L^2/(2*D_noise) ~ hours for the ~0.15-unit
+   halos at noise 0.008. Practical takeaways: the dish is a long-memory
+   medium (erased structure stays forensically readable for many minutes at
+   least), the depleted halos outlive the band order by orders of
+   magnitude, and the noise slider is the forgetting-rate knob (memory time
+   ~ 1/noise^2).
 7. Coarsening exponents. Does band count decay as a power law in time?
    Track the FFT peak across a dump sequence; compare against zippering
    literature scaling. Partial data from experiment 1's age series
