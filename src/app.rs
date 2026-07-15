@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::clock::{format_time, ClockSource};
 use crate::field::{
-    build_layouts, FieldSources, HandMagnets, LayoutSpec, MagnetKind, SpecShape,
+    build_face, Face, FaceKind, FieldSources, LayoutSpec, MagnetKind, SegClock, SpecShape,
 };
 use crate::render::{draw_clock, DebugViews, Framebuffer, Style};
 use crate::sim::{Sim, SimParams};
@@ -21,6 +21,8 @@ const STEP_BUDGET: web_time::Duration = web_time::Duration::from_millis(12);
 #[derive(Clone, Copy)]
 pub struct AppConfig {
     pub specs: [LayoutSpec; 3],
+    pub face_kind: FaceKind,
+    pub seg: SegClock,
     pub style: Style,
     pub speed: f64,
     pub sim: SimParams,
@@ -34,7 +36,9 @@ pub struct ClockApp {
     clock: ClockSource,
     speed: f64,
     specs: [LayoutSpec; 3],
-    layouts: [HandMagnets; 3],
+    face_kind: FaceKind,
+    seg: SegClock,
+    face: Face,
     views: DebugViews,
     style: Style,
     show_panel: bool,
@@ -59,6 +63,8 @@ impl ClockApp {
         style: Style,
         params: SimParams,
         specs: [LayoutSpec; 3],
+        face_kind: FaceKind,
+        seg: SegClock,
         show_panel: bool,
         pending: Option<PendingConfig>,
     ) -> Self {
@@ -68,7 +74,9 @@ impl ClockApp {
             clock,
             speed,
             specs,
-            layouts: build_layouts(&specs),
+            face_kind,
+            seg,
+            face: build_face(face_kind, &specs, seg),
             views,
             style,
             show_panel,
@@ -82,11 +90,19 @@ impl ClockApp {
         }
     }
 
+    /// Rebuild the live face after its inputs (specs, mode, seg config)
+    /// change. Cheap: called on edit, not per frame.
+    fn rebuild_face(&mut self) {
+        self.face = build_face(self.face_kind, &self.specs, self.seg);
+    }
+
     /// Apply an externally pushed configuration, preserving particle state
     /// (count changes go through Sim::set_count).
     fn apply_config(&mut self, cfg: AppConfig) {
         self.specs = cfg.specs;
-        self.layouts = build_layouts(&self.specs);
+        self.face_kind = cfg.face_kind;
+        self.seg = cfg.seg;
+        self.rebuild_face();
         self.style = cfg.style;
         self.show_panel = cfg.show_panel;
         if (cfg.speed - self.clock.multiplier()).abs() > f64::EPSILON {
@@ -107,7 +123,7 @@ impl ClockApp {
     /// it is down.
     fn sources_at(&self, t: f64) -> FieldSources {
         let mut sources =
-            FieldSources::at_time(&self.layouts, t, self.sim.params.field_clamp);
+            FieldSources::at_time(&self.face, t, self.sim.params.field_clamp);
         if let Some((world, _)) = self.pointer {
             let p = &self.sim.params;
             if p.pointer_strength > 0.0 {
@@ -170,9 +186,44 @@ impl ClockApp {
                     self.clock.set_multiplier(self.speed);
                 }
                 ui.separator();
-                ui.label("magnets");
+                let mut face_changed = false;
+                ui.horizontal(|ui| {
+                    ui.label("face");
+                    for (kind, label) in [(FaceKind::Hands, "hands"), (FaceKind::Seg, "seg")] {
+                        let sel = self.face_kind == kind;
+                        if ui.selectable_label(sel, label).clicked() && !sel {
+                            self.face_kind = kind;
+                            face_changed = true;
+                        }
+                    }
+                });
+                if self.face_kind == FaceKind::Seg {
+                    ui.horizontal(|ui| {
+                        if ui.checkbox(&mut self.seg.with_seconds, "seconds").changed() {
+                            face_changed = true;
+                        }
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.seg.strength)
+                                    .range(0.0..=2.0)
+                                    .speed(0.01)
+                                    .prefix("s "),
+                            )
+                            .changed()
+                        {
+                            face_changed = true;
+                        }
+                    });
+                }
+                let hands_mode = self.face_kind == FaceKind::Hands;
                 let mut specs_changed = false;
+                if hands_mode {
+                    ui.label("magnets");
+                }
                 for (i, name) in ["hour", "minute", "second"].iter().enumerate() {
+                    if !hands_mode {
+                        break;
+                    }
                     ui.horizontal(|ui| {
                         ui.label(*name);
                         let spec = &mut self.specs[i];
@@ -281,8 +332,8 @@ impl ClockApp {
                         }
                     });
                 }
-                if specs_changed {
-                    self.layouts = build_layouts(&self.specs);
+                if specs_changed || face_changed {
+                    self.rebuild_face();
                 }
                 ui.separator();
                 ui.label("particles");
@@ -501,6 +552,7 @@ impl eframe::App for ClockApp {
                 draw_clock(
                     &mut self.fb,
                     now,
+                    &self.face,
                     &sources,
                     self.views,
                     self.style,

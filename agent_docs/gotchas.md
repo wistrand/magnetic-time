@@ -204,6 +204,25 @@ what implementation teaches; correct entries that turn out wrong.
   1..16, length fraction 0..2, disc radius 0.005..0.3). Only the scalar
   sim params were unguarded.
 
+## Findings from the seven-segment face
+
+- One bar magnet per segment does NOT render a readable segment: a bar's only
+  pole faces are its two ends, so particles pool at segment junctions and the
+  interiors stay dark. Each segment is built from SEG_SUB collinear
+  alternating bars so pole nodes distribute along it (see
+  [design-simulation.md](design-simulation.md)). If a future change makes
+  digits look like corner-dots, this is why.
+- `--grad-check` on a seg face reports a higher mean relative error (~1e-2)
+  than hands (~5e-4) with more >1% outliers. Not a bug: the seg face packs
+  ~100-150 charge elements densely, so many random sample points land inside
+  an element's r_min clamp where the numeric stencil straddles the kink (the
+  analytic one-sided value is correct). The `expand` path is shared with
+  hands and unchanged.
+- Adding the `Face` enum refactored `FieldSources::at_time` to dispatch on
+  face and share element expansion via `expand`. Verified behavior-preserving
+  for hands by byte-identical headless dump against the pre-refactor baseline;
+  keep that check when touching `expand` or `at_time`.
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears

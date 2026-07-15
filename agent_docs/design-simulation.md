@@ -23,15 +23,31 @@ and rejected: the overdamped particle model produces the desired look at a
 fraction of the complexity, and the piece is judged by look, not physical
 accuracy.
 
-## Hand magnets and the driving field
+## Magnets and the driving field
 
-Each hand carries a rigid layout of magnets (position along the hand, moment
-vector, polarity, shape). Layouts are data-driven so they can be swapped per
-hand: tip-only magnet vs an alternating-polarity strip give visibly different
-particle signatures (single blob vs stripes).
+The `Face` (`src/field.rs`) chooses what carries the magnets. Both faces
+produce world-space magnets that expand into the same field elements through
+the shared `expand` helper, so the sim and renderer are face-agnostic:
+
+- Hands (default): each hand carries a rigid layout of magnets (position along
+  the hand, moment vector, polarity, shape), rotated by the time-derived hand
+  angle. Layouts are data-driven so they can be swapped per hand: tip-only
+  magnet vs an alternating-polarity strip give visibly different particle
+  signatures (single blob vs stripes).
+- Seven-segment (`SegClock`, `--face seg`): a digital HH:MM (or HH:MM:SS)
+  readout. Each lit segment is drawn as SEG_SUB collinear alternating bar
+  magnets rather than one bar. Reason: a single bar's only pole faces are its
+  two ends, so particles pile at segment junctions and the bar interiors stay
+  dark; the extra alternating faces distribute pole nodes along the segment so
+  it fills and reads. In HH:MM mode (no seconds digits) a disc magnet orbits
+  the dial once a minute as a seconds indicator, the digital echo of the
+  analog second hand; HH:MM:SS drops it since the digits carry seconds.
+  Legibility wants low particle count and low/zero chaining (chaining bands
+  each segment into rings); the rings preset is tuned for hands, not a crisp
+  readout.
 
 Field of one dipole at offset r: `B(r) = k * (3(m.r_hat)r_hat - m) / |r|^3`.
-Total B is the sum over all field elements of all hands.
+Total B is the sum over all field elements of every magnet the face emits.
 
 Magnets have a shape (`MagnetShape` in `src/field.rs`), which changes the
 field, not just the marker:

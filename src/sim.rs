@@ -685,14 +685,14 @@ impl Sim {
     /// field each step as the hands move. Returns the end time.
     pub fn advance(
         &mut self,
-        layouts: &[crate::field::HandMagnets; 3],
+        face: &crate::field::Face,
         t0: f64,
         seconds: f64,
     ) -> f64 {
         let steps = (seconds / self.params.dt).round() as u64;
         for k in 0..steps {
             let t = t0 + k as f64 * self.params.dt;
-            let sources = FieldSources::at_time(layouts, t, self.params.field_clamp);
+            let sources = FieldSources::at_time(face, t, self.params.field_clamp);
             self.step(&sources);
         }
         t0 + steps as f64 * self.params.dt

@@ -13,7 +13,7 @@ file after all phases landed; design rationale lives in
 | `src/main.rs`  | Native CLI (flags, headless mode, --grad-check) and both entry points (native, wasm)   |
 | `src/clock.rs` | The single time source: display seconds since midnight, speed multiplier, HH:MM:SS I/O |
 | `src/hands.rs` | Hand lengths and angles; defines clock-face units (center origin, dial radius 1, y down) |
-| `src/field.rs` | Magnet layouts (`LayoutSpec` -> `HandMagnets`), field elements, analytic B and grad(|B|^2), string parsers shared by CLI and web attributes |
+| `src/field.rs` | The `Face` (rotating `HandMagnets` or the `SegClock` seven-segment readout), magnet layouts (`LayoutSpec`), field elements, analytic B and grad(|B|^2), string parsers shared by CLI and web attributes |
 | `src/sim.rs`   | `SimParams` tunables, overdamped particle stepper, spatial hash, chains, drag coupling  |
 | `src/render.rs`| Software rasterizer, `Style`/`Palette`/`Theme`, debug overlays, PNG output              |
 | `src/app.rs`   | eframe app: pending-config channel, pointer magnet, dev panel, fixed-dt catch-up loop   |
@@ -28,14 +28,15 @@ file after all phases landed; design rationale lives in
    [gotchas.md](gotchas.md)) toward the current display time under a 12 ms
    wall budget; excess display time is dropped (hands stay truthful,
    particles skip).
-2. Each sim step: `FieldSources::at_time` rotates the hand layouts into world
-   elements (plus the pointer magnet), pass 1 samples B and grad(|B|^2)
-   analytically per particle, pass 2 sums neighbor forces on the spatial
-   hash, optional pass 2.5 smooths velocities (drag coupling), pass 3
-   integrates.
-3. `draw_clock` rasterizes face, hands, particles, and overlays into one RGBA
-   buffer (capped by `Style::max_px`), uploaded as an egui texture. Headless
-   mode runs the same loop without a window and writes the buffer to PNG.
+2. Each sim step: `FieldSources::at_time` expands the current `Face` into
+   world elements (hands rotated by time, or the seg readout's switched bars),
+   plus the pointer magnet; pass 1 samples B and grad(|B|^2) analytically per
+   particle, pass 2 sums neighbor forces on the spatial hash, optional pass
+   2.5 smooths velocities (drag coupling), pass 3 integrates.
+3. `draw_clock` rasterizes face, magnets, particles, and overlays into one
+   RGBA buffer (capped by `Style::max_px`), uploaded as an egui texture.
+   Headless mode runs the same loop without a window and writes the buffer to
+   PNG.
 
 ## Verification methodology
 
@@ -45,6 +46,9 @@ read by the agent plus the owner running the app:
 ```bash
 cargo run --release -- --headless --time 13:37:35 --sim-seconds 240 --dump out.png
 magnetic-time --grad-check     # after any field-element change
+magnetic-time --headless ... --dump-positions out.csv   # positions + local
+                               # field for measurement scripts; image-based
+                               # estimators fuse overlapping dots (finding 10)
 ```
 
 Dumps are deterministic (fixed seed/time/duration, order-independent passes,
@@ -72,6 +76,16 @@ analysis scripts in `scripts/`, the exposure of every remaining sim
 constant (dt, field_clamp, chain caps, repulsion radius), the nearest-N
 neighbor selection, the fluid_scale band-size dial, and the public writeup
 docs/banding.html.
+
+Latest work (2026-07-15): the chain-length question resolved (chains are
+regime-dependent, absorbed by dense bands, not bond-limited; measured via
+`--dump-positions` and the experimental `--chain-cone` probe, see
+[research-chain-banding.md](research-chain-banding.md) finding 10); the
+spatial-hash cell fix so wide chain_range/repulsion ratios are honored, not
+truncated at 4 cells; CLI input validation via the single-owner `bounds`
+table (`SimParams::validate` errors, web/sliders clamp the same limits); and
+the `Face` abstraction adding a digital seven-segment readout (`--face seg`)
+alongside the hands, with a disc seconds marker orbiting the HH:MM face.
 
 ## Deferred / gated work
 

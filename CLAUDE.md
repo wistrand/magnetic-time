@@ -4,11 +4,14 @@ file in `agent_docs/`.
 ## What this is
 
 A Rust + egui clock. The hands carry magnets (point dipoles, soft discs, or
-bar magnets built from pole-face charges). Above them sits a simulated liquid
-layer of magnetic particles in the overdamped regime: each fixed-dt step,
-particle velocity comes from the analytic field gradient of the hand magnets
-(plus an interactive pointer magnet), short-range dipole-dipole chaining,
-soft-core repulsion, optional drag coupling, noise, and the dish wall.
+bar magnets built from pole-face charges). The face is either rotating hands
+(default) or a digital seven-segment readout whose lit segments are bar
+magnets switched by the time (`--face seg`). Above them sits a simulated
+liquid layer of magnetic particles in the overdamped regime: each fixed-dt
+step, particle velocity comes from the analytic field gradient of the face
+magnets (plus an interactive pointer magnet), short-range dipole-dipole
+chaining, soft-core repulsion, optional drag coupling, noise, and the dish
+wall.
 Everything is rasterized into one CPU pixel buffer shown as an egui texture.
 Ships as a native app (with headless PNG mode for verification) and as a
 wasm `<magnetic-clock>` web component whose attributes reuse the CLI grammar.
@@ -41,6 +44,8 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --palette ice|ember|emerald|violet|mono --bg RRGGBB
                                     #   --max-px N (interactive resolution cap, 0 = off)
                                     #   --mobility F --max-speed F --noise F --repulsion F
+                                    #   --face hands|seg|seg-hms (hands, or 7-seg digital HH:MM / HH:MM:SS)
+                                    #   --seg-strength F (per-segment bar strength, seg faces)
                                     #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
                                     #   --strengths F (one value, or hour,minute,second)
                                     #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;

@@ -43,6 +43,11 @@ struct Options {
     style: render::Style,
     sim: sim::SimParams,
     magnets: [field::LayoutSpec; 3],
+    /// Which face drives the field: rotating hands (default) or a digital
+    /// seven-segment readout. `magnets` still holds the hand layout so a
+    /// later switch back to hands keeps it.
+    face_kind: field::FaceKind,
+    seg: field::SegClock,
     /// Verify the analytic gradient against central differences and exit.
     grad_check: bool,
     /// Headless annealing: run the first `anneal_for` sim-seconds with
@@ -67,6 +72,8 @@ impl Default for Options {
             style: render::Style::default(),
             sim: sim::SimParams::default(),
             magnets: field::default_specs(),
+            face_kind: field::FaceKind::Hands,
+            seg: field::SegClock::default(),
             grad_check: false,
             anneal_from: 0.0,
             anneal_for: 0.0,
@@ -96,8 +103,11 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--anneal-from F --anneal-for SECONDS]  headless: run the
                      first SECONDS at chain-strength F, then switch
                      [--grad-check]  verify analytic field gradient, then exit
+                     [--face hands|seg|seg-hms]  hands (default) or a digital
+                     seven-segment readout (seg = HH:MM, seg-hms = HH:MM:SS)
+                     [--seg-strength F]  per-segment bar magnet strength
                      [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
-                     one value applies to all hands
+                     one value applies to all hands (hands face only)
                      [--strengths HOUR,MINUTE,SECOND]  per-magnet moment scale;
                      one value applies to all hands
                      [--shapes HOUR,MINUTE,SECOND]  each point | disc:R | rect:FxW,
@@ -244,6 +254,28 @@ fn parse_args() -> Result<Options, String> {
                     .map_err(|e| format!("--pointer-visual: {e}"))?
             }
             "--magnets" => opts.magnets = field::parse_magnets(&value("--magnets", &mut args)?)?,
+            "--face" => {
+                let v = value("--face", &mut args)?;
+                match v.as_str() {
+                    "hands" => opts.face_kind = field::FaceKind::Hands,
+                    "seg" => {
+                        opts.face_kind = field::FaceKind::Seg;
+                        opts.seg.with_seconds = false;
+                    }
+                    "seg-hms" => {
+                        opts.face_kind = field::FaceKind::Seg;
+                        opts.seg.with_seconds = true;
+                    }
+                    other => {
+                        return Err(format!("--face: unknown '{other}' (hands, seg, seg-hms)"))
+                    }
+                }
+            }
+            "--seg-strength" => {
+                opts.seg.strength = value("--seg-strength", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--seg-strength: {e}"))?
+            }
             "--strengths" => {
                 strengths = Some(field::parse_strengths(&value("--strengths", &mut args)?)?)
             }
@@ -320,9 +352,9 @@ fn parse_args() -> Result<Options, String> {
 /// expected (the numeric stencil straddles the kink; the analytic value is
 /// the correct one-sided derivative there).
 fn run_grad_check(opts: &Options) {
-    let layouts = field::build_layouts(&opts.magnets);
+    let face = field::build_face(opts.face_kind, &opts.magnets, opts.seg);
     let t = opts.time.unwrap_or(10.0 * 3600.0 + 8.0 * 60.0 + 30.0);
-    let sources = field::FieldSources::at_time(&layouts, t, opts.sim.field_clamp);
+    let sources = field::FieldSources::at_time(&face, t, opts.sim.field_clamp);
     let mut rng = sim::Rng::new(42);
     let (mut max_rel, mut sum, mut bad) = (0.0f64, 0.0f64, 0u32);
     const N: u32 = 20000;
@@ -352,24 +384,25 @@ fn run_grad_check(opts: &Options) {
 #[cfg(not(target_arch = "wasm32"))]
 fn run_headless(opts: &Options) -> Result<(), String> {
     let start = opts.time.unwrap_or_else(|| ClockSource::wall(1.0).now());
-    let layouts = field::build_layouts(&opts.magnets);
+    let face = field::build_face(opts.face_kind, &opts.magnets, opts.seg);
     let mut particle_sim = sim::Sim::new(opts.sim);
     let t = if opts.anneal_for > 0.0 {
         // Two-phase run for hysteresis experiments: anneal at one chain
         // strength, then switch to the requested one.
         let pre = opts.anneal_for.min(opts.sim_seconds);
         particle_sim.params.chain_strength = opts.anneal_from;
-        let mid = particle_sim.advance(&layouts, start, pre);
+        let mid = particle_sim.advance(&face, start, pre);
         particle_sim.params.chain_strength = opts.sim.chain_strength;
-        particle_sim.advance(&layouts, mid, opts.sim_seconds - pre)
+        particle_sim.advance(&face, mid, opts.sim_seconds - pre)
     } else {
-        particle_sim.advance(&layouts, start, opts.sim_seconds)
+        particle_sim.advance(&face, start, opts.sim_seconds)
     };
-    let sources = field::FieldSources::at_time(&layouts, t, opts.sim.field_clamp);
+    let sources = field::FieldSources::at_time(&face, t, opts.sim.field_clamp);
     let mut fb = render::Framebuffer::new(opts.size, opts.size);
     render::draw_clock(
         &mut fb,
         t,
+        &face,
         &sources,
         opts.views,
         opts.style,
@@ -438,6 +471,8 @@ fn main() -> ExitCode {
                 opts.style,
                 opts.sim,
                 opts.magnets,
+                opts.face_kind,
+                opts.seg,
                 true,
                 None,
             )))

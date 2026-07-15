@@ -17,7 +17,7 @@ const ensureWasm = () => (wasmInit ??= init());
 // Application order matters: "magnets" resets per-hand strength/shape, so
 // "strengths" and "shapes" are re-applied after it.
 const ATTRS = [
-  "magnets", "strengths", "shapes",
+  "face", "seg-strength", "magnets", "strengths", "shapes",
   "particles", "speed", "stroke-len", "palette", "bg", "show-hands", "dev-panel",
   "mobility", "max-speed", "noise", "repulsion",
   "chain-strength", "chain-spacing", "chain-range", "chain-compress", "drag",
@@ -72,6 +72,10 @@ class MagneticClock extends HTMLElement {
           continue;
         }
         if (!this.hasAttribute(name)) continue;
+        if (name === "face") {
+          h.set_face(this.getAttribute(name));
+          continue;
+        }
         if (name === "magnets") {
           h.set_magnets(this.getAttribute(name));
           continue;
@@ -103,6 +107,7 @@ class MagneticClock extends HTMLElement {
           case "max-speed": h.set_max_speed(v); break;
           case "noise": h.set_noise(v); break;
           case "repulsion": h.set_repulsion(v); break;
+          case "seg-strength": h.set_seg_strength(v); break;
           case "chain-strength": h.set_chain_strength(v); break;
           case "chain-spacing": h.set_chain_spacing(v); break;
           case "chain-range": h.set_chain_range(v); break;

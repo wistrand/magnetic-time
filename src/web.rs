@@ -20,6 +20,8 @@ use crate::sim::SimParams;
 fn web_defaults() -> AppConfig {
     AppConfig {
         specs: field::default_specs(),
+        face_kind: field::FaceKind::Hands,
+        seg: field::SegClock::default(),
         style: Style::default(),
         speed: 1.0,
         sim: SimParams {
@@ -72,6 +74,8 @@ impl WebHandle {
                         cfg.style,
                         cfg.sim,
                         cfg.specs,
+                        cfg.face_kind,
+                        cfg.seg,
                         cfg.show_panel,
                         Some(pending),
                     )))
@@ -87,6 +91,32 @@ impl WebHandle {
 
     fn push(&self) {
         *self.pending.borrow_mut() = Some(*self.config.borrow());
+    }
+
+    /// Face mode: "hands" (default), "seg" (HH:MM), or "seg-hms" (HH:MM:SS).
+    pub fn set_face(&self, v: &str) -> Result<(), JsValue> {
+        let mut cfg = self.config.borrow_mut();
+        match v {
+            "hands" => cfg.face_kind = field::FaceKind::Hands,
+            "seg" => {
+                cfg.face_kind = field::FaceKind::Seg;
+                cfg.seg.with_seconds = false;
+            }
+            "seg-hms" => {
+                cfg.face_kind = field::FaceKind::Seg;
+                cfg.seg.with_seconds = true;
+            }
+            other => return Err(js_err(format!("face: unknown '{other}'"))),
+        }
+        drop(cfg);
+        self.push();
+        Ok(())
+    }
+
+    /// Seven-segment per-segment magnet strength.
+    pub fn set_seg_strength(&self, v: f64) {
+        self.config.borrow_mut().seg.strength = v.max(0.0);
+        self.push();
     }
 
     /// Layout kinds per hand ("tip", "strip:N", "alt:N"). Resets strengths

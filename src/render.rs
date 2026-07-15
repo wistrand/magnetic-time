@@ -7,7 +7,7 @@ use std::io::BufWriter;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-use crate::field::FieldSources;
+use crate::field::{Face, FieldSources, MagnetShape};
 use crate::hands;
 use crate::sim::Sim;
 use crate::vec2::Vec2;
@@ -436,6 +436,7 @@ impl Map {
 pub fn draw_clock(
     fb: &mut Framebuffer,
     time_secs: f64,
+    face: &Face,
     sources: &FieldSources,
     views: DebugViews,
     style: Style,
@@ -449,47 +450,75 @@ pub fn draw_clock(
     fb.disc(cx, cy, r, theme.dial);
     fb.ring(cx, cy, r, r * 0.02, theme.rim);
 
-    // Ticks: 60 minor, every fifth major.
-    for i in 0..60 {
-        let a = i as f64 / 60.0 * TAU - TAU / 4.0;
-        let (major, r0, hw) = if i % 5 == 0 {
-            (true, 0.88, r * 0.010)
-        } else {
-            (false, 0.93, r * 0.004)
-        };
-        let color = if major { theme.tick_major } else { theme.tick_minor };
-        fb.capsule(
-            cx + a.cos() * r * r0,
-            cy + a.sin() * r * r0,
-            cx + a.cos() * r * 0.97,
-            cy + a.sin() * r * 0.97,
-            hw,
-            color,
-        );
+    // Analog ticks only under the hands; a digital face would read oddly with
+    // minute ticks behind it.
+    if matches!(face, Face::Hands(_)) {
+        for i in 0..60 {
+            let a = i as f64 / 60.0 * TAU - TAU / 4.0;
+            let (major, r0, hw) = if i % 5 == 0 {
+                (true, 0.88, r * 0.010)
+            } else {
+                (false, 0.93, r * 0.004)
+            };
+            let color = if major { theme.tick_major } else { theme.tick_minor };
+            fb.capsule(
+                cx + a.cos() * r * r0,
+                cy + a.sin() * r * r0,
+                cx + a.cos() * r * 0.97,
+                cy + a.sin() * r * 0.97,
+                hw,
+                color,
+            );
+        }
     }
 
     if views.field {
         draw_field_heatmap(fb, &m, sources);
     }
 
+    // The magnets under the particle layer. Hands draw as hands; the seg face
+    // draws its bars faintly from the world-space markers. Both gated on
+    // show_hands (particles carry the reading by default).
     if style.show_hands {
-        let angles = hands::angles(time_secs);
-        let widths = [r * 0.030, r * 0.020, r * 0.007];
-        let tails = [0.06, 0.06, 0.14];
-        let colors = [theme.hand, theme.hand, theme.second];
-        for i in 0..3 {
-            let a = angles[i];
-            fb.capsule(
-                cx - a.cos() * r * tails[i],
-                cy - a.sin() * r * tails[i],
-                cx + a.cos() * r * hands::LEN[i],
-                cy + a.sin() * r * hands::LEN[i],
-                widths[i],
-                colors[i],
-            );
+        match face {
+            Face::Hands(_) => {
+                let angles = hands::angles(time_secs);
+                let widths = [r * 0.030, r * 0.020, r * 0.007];
+                let tails = [0.06, 0.06, 0.14];
+                let colors = [theme.hand, theme.hand, theme.second];
+                for i in 0..3 {
+                    let a = angles[i];
+                    fb.capsule(
+                        cx - a.cos() * r * tails[i],
+                        cy - a.sin() * r * tails[i],
+                        cx + a.cos() * r * hands::LEN[i],
+                        cy + a.sin() * r * hands::LEN[i],
+                        widths[i],
+                        colors[i],
+                    );
+                }
+                fb.disc(cx, cy, r * 0.028, theme.hand);
+                fb.disc(cx, cy, r * 0.014, theme.second);
+            }
+            Face::Seg(_) => {
+                for mk in &sources.markers {
+                    match mk.shape {
+                        MagnetShape::Rect { half_len, half_wid } => {
+                            let a = mk.pos + mk.dir * half_len;
+                            let b = mk.pos - mk.dir * half_len;
+                            let (ax, ay) = m.px(a);
+                            let (bx, by) = m.px(b);
+                            fb.capsule(ax, ay, bx, by, (half_wid * r).max(1.0), theme.hand);
+                        }
+                        MagnetShape::Disc { radius } => {
+                            let (px, py) = m.px(mk.pos);
+                            fb.disc(px, py, (radius * r).max(1.0), theme.hand);
+                        }
+                        MagnetShape::Point => {}
+                    }
+                }
+            }
         }
-        fb.disc(cx, cy, r * 0.028, theme.hand);
-        fb.disc(cx, cy, r * 0.014, theme.second);
     }
 
     // Particles float above the hands.

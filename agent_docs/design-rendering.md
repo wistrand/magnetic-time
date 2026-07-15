@@ -9,10 +9,15 @@ Everything is drawn into one CPU RGBA pixel buffer by the software rasterizer
 in `src/render.rs` (`draw_clock`, SDF-based anti-aliased primitives), in this
 order:
 
-1. Clock face: dial, rim, ticks (no numerals; text rasterization is not worth
-   a font dependency).
-2. Hands, under the particle layer (particles float above the hands in the
-   fiction).
+1. Clock face: dial, rim, and (hands face only) the 60 minute ticks. No
+   numerals; text rasterization is not worth a font dependency. The digital
+   seven-segment face skips the ticks, which would read oddly behind it.
+2. The face magnets, under the particle layer (they float below the particles
+   in the fiction), and only when `Style::show_hands` is set. Hands draw as
+   capsules from the time-derived angles; the seg face draws each bar and
+   colon/orbit disc from `sources.markers` (world-space, so no seg geometry
+   is duplicated in the renderer). Both default off: the particles carry the
+   reading.
 3. Particle layer.
 
 Interactive mode uploads the buffer via `TextureHandle::set` and draws it as a
@@ -95,9 +100,12 @@ not exist headless; `--grad-check` verifies field math without rendering.
 ## Dev panel
 
 An egui side panel (vertical scroll for small windows) with sliders for every
-tunable, the time-speed multiplier, magnet layout/shape/strength combos per
-hand, palette and background pickers, debug view toggles, particle count
-(live), reset, and the dump button. Native shows it by default; the web
+tunable, the time-speed multiplier, a face selector (hands / seg, with the
+seconds and per-segment strength controls in seg mode), magnet
+layout/shape/strength combos per hand (hands face only), palette and
+background pickers, debug view toggles, particle count (live), reset, and the
+dump button. Slider ranges come from the shared `bounds` table in
+`src/sim.rs`, not inline literals. Native shows it by default; the web
 component hides it unless the `dev-panel` attribute is set. Tapping the
 12 o'clock tick toggles it anywhere (native and web); the pointer magnet is
 suppressed inside that hotspot so the tap does not stir the particles.
