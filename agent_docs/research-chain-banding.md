@@ -204,9 +204,14 @@ isotropic ring); that is an analysis script, not a sim change.
    as weak organisms (internally bonded, persistent, collide as objects),
    and the second-hand comet/wake system is the glider + glider gun.
    Remaining sub-questions:
-   - Loops: chains closing along the field lines that loop pole-to-pole on a
-     bar magnet; the spiral curls at overhung pole ends in the rings preset
-     are candidates. Inspect with `--view chains`.
+   - Loops: CHECKED 2026-07-15 with `--view chains` on the rings preset
+     (600 s). Closed loops exist, but not the predicted kind. Field-line-
+     following chains cannot close: in-plane field lines run pole to pole,
+     so such chains terminate on the poles. What does close is the
+     transverse band: unbroken 360-degree annuli around isolated poles
+     (e.g. the "owl eye" rings at the overhung bar ends), which are closed
+     cycles of lateral bonds by continuity. The spiral curls are open
+     spiral bands, not loops. So: no chain loops, yes band loops.
    - Gliders: the second-hand comet already qualifies (shape persists while
      constituent particles turn over), and the second hand is a glider gun
      emitting one wake band per lap.
@@ -242,15 +247,23 @@ isotropic ring); that is an analysis script, not a sim change.
    least), the depleted halos outlive the band order by orders of
    magnitude, and the noise slider is the forgetting-rate knob (memory time
    ~ 1/noise^2).
-7. Coarsening exponents. Does band count decay as a power law in time?
-   Track the FFT peak across a dump sequence; compare against zippering
-   literature scaling. Partial data from experiment 1's age series
-   (90/180/360 s: non-monotone period, condensation then coarsening) and
-   experiment 3's ring tracking (`scripts/front_track.py --peaks`: count
-   4+ -> 1 over six minutes, consumption at the pole dominating pairwise
-   merging). A proper exponent needs a denser time series, seed averaging,
-   and a wider autocorrelation window than `scripts/band_order.py`
-   currently uses.
+7. Coarsening exponents. RUN 2026-07-15: log-spaced times 30..765 s x 3
+   seeds, exp-1 config at chain_strength 0.06, ring statistics from
+   `scripts/front_track.py --peaks` around the hour pole.
+
+   Results: NO power law in this system at this size. Ring count plateaus
+   at ~3 (seed-stable to +-1) from 30 through 225 s at constant ~35 px
+   spacing, then collapses abruptly to ~1 between 225 and 340 s and stays
+   there; fitted slopes over the unsaturated range are ~t^-0.07 (i.e.
+   flat-then-cliff, not scaling). Coarsening proceeds by discrete
+   band-death events (consumption at the pole, occasional merger), matching
+   experiment 4's bands-as-cohesive-objects picture, not by continuous
+   scale growth. Caveat: only ~4 rings fit in the measurable annulus, far
+   too few for scaling statistics; literature power laws describe
+   many-object regimes. A real exponent would need a much larger system
+   (more particles, bigger dish, or a smaller chain_spacing so more rings
+   fit), which exceeds the current interactive count budget but is
+   feasible headless.
 8. Template reproduction. Seed one band next to uniform gas (pointer);
    does it accrete an adjacent row (autocatalytic lateral growth)? This is
    the system's closest analogue to reproduction.
