@@ -78,7 +78,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
-                     [--chain-neighbors N] [--dt F] [--field-clamp F]
+                     [--chain-neighbors N] [--dt F] [--field-clamp F] [--fluid-scale F]
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
                      [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
@@ -189,6 +189,11 @@ fn parse_args() -> Result<Options, String> {
                 opts.sim.repulsion_radius = value("--repulsion-radius", &mut args)?
                     .parse()
                     .map_err(|e| format!("--repulsion-radius: {e}"))?
+            }
+            "--fluid-scale" => {
+                opts.sim.fluid_scale = value("--fluid-scale", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--fluid-scale: {e}"))?
             }
             "--field-clamp" => {
                 opts.sim.field_clamp = value("--field-clamp", &mut args)?

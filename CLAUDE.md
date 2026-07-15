@@ -40,25 +40,27 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --mobility F --max-speed F --noise F --repulsion F
                                     #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
                                     #   --strengths F (one value, or hour,minute,second)
+                                    #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
+                                    #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
                                     #   --chain-strength F --chain-spacing F --chain-range F
                                     #   --chain-compress F --chain-speed-cap F --chain-neighbors N
-                                    #   --repulsion-radius F --dt F --drag F
+                                    #   --repulsion-radius F --dt F --field-clamp F --drag F
+                                    #   --fluid-scale F (band-size dial; similarity transform
+                                    #     of the microphysics, wavelength scales linearly)
                                     #   --pointer-strength F --pointer-radius F --pointer-visual F
                                     #     (touch/mouse magnet; visual = weight in stroke color)
 magnetic-time --grad-check          # verify analytic field gradient vs numeric; run after
                                     # changing field elements (honors --magnets/--shapes)
                                     # headless two-phase runs (hysteresis experiments):
                                     #   --anneal-from F --anneal-for SECONDS
-                                    #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
-                                    #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
 cargo check                         # compile check; do not run cargo test
 cargo check --target wasm32-unknown-unknown   # browser build must stay green
 ./scripts/build-web.sh              # build wasm into docs/app/pkg/ (installs a
                                     # matching wasm-bindgen-cli; owner runs this)
 ```
 
-Headless flags are the planned interface; keep this block in sync when the CLI
-lands.
+Keep this block in sync with the CLI (USAGE in `src/main.rs` is the full
+reference).
 
 ## Docs
 
@@ -96,6 +98,9 @@ lands.
 - No AI-isms (no "powerful", "seamlessly", "leverage", rule-of-three, "not just
   X but Y"). No em dashes or emojis in project copy. State the point directly.
 - Concise; assume the agent is competent. Add only what it can't infer.
+- Never write meta-narrative sentences: no announcing what the text will do
+  ("the short version", "deserves its own accounting", "the rest of this
+  page..."). Start with the substance.
 - State each rule on its own line as always/never.
 - Mark inferred claims and open questions; don't present a guess as fact.
 - Keep this file the routing entry point; subsystem detail goes in agent_docs/.

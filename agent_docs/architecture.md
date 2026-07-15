@@ -23,9 +23,11 @@ file after all phases landed; design rationale lives in
 ## Data flow per frame (interactive)
 
 1. `ClockApp::update` drains the pending config (web component pushes), reads
-   the pointer, and steps the sim in fixed dt (1/30 display-second) toward
-   the current display time under a 12 ms wall budget; excess display time is
-   dropped (hands stay truthful, particles skip).
+   the pointer, and steps the sim in fixed dt (`SimParams::dt`, default 1/30
+   display-second; quantitative pattern work needs 1/120, see
+   [gotchas.md](gotchas.md)) toward the current display time under a 12 ms
+   wall budget; excess display time is dropped (hands stay truthful,
+   particles skip).
 2. Each sim step: `FieldSources::at_time` rotates the hand layouts into world
    elements (plus the pointer magnet), pass 1 samples B and grad(|B|^2)
    analytically per particle, pass 2 sums neighbor forces on the spatial
@@ -64,14 +66,19 @@ per-hand magnet strengths and shapes (disc, hand-relative bars), chain
 geometry parameters and compression, XSPH drag coupling, analytic gradient
 with `--grad-check`, palettes and background theming with adaptive ink
 blending, the wasm build and `<magnetic-clock>` web component, the pointer
-magnet, and the resolution cap.
+magnet, and the resolution cap. After that, the band-physics research
+program ([research-chain-banding.md](research-chain-banding.md)): the
+analysis scripts in `scripts/`, the exposure of every remaining sim
+constant (dt, field_clamp, chain caps, repulsion radius), the nearest-N
+neighbor selection, the fluid_scale band-size dial, and the public writeup
+docs/banding.html.
 
 ## Deferred / gated work
 
 - GPU path (old phase 6): only if CPU limits particle count. First move is
   rasterization via eframe's wgpu `PaintCallback`, not a compute-shader sim;
-  see the discussion notes in [gotchas.md](gotchas.md) and remember the sim
-  is neighbor-bound at current presets.
+  the sim is neighbor-bound at current presets (profiling finding in
+  [gotchas.md](gotchas.md)), so GPU field math would buy little.
 - f32 + struct-of-arrays hot path: parked until a low-power target (e.g.
   Raspberry Pi) exists to measure on. The analytic gradient already removed
   the f32 cancellation hazard.

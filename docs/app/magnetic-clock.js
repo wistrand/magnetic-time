@@ -22,6 +22,7 @@ const ATTRS = [
   "mobility", "max-speed", "noise", "repulsion",
   "chain-strength", "chain-spacing", "chain-range", "chain-compress", "drag",
   "pointer-strength", "pointer-radius", "pointer-visual", "max-px",
+  "fluid-scale",
 ];
 
 class MagneticClock extends HTMLElement {
@@ -111,6 +112,7 @@ class MagneticClock extends HTMLElement {
           case "pointer-radius": h.set_pointer_radius(v); break;
           case "pointer-visual": h.set_pointer_visual(v); break;
           case "max-px": h.set_max_px(v); break;
+          case "fluid-scale": h.set_fluid_scale(v); break;
         }
       } catch (e) {
         console.warn(`magnetic-clock: attribute ${name}:`, e);

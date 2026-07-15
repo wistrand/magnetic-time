@@ -516,6 +516,18 @@ creep, step budget); the dumps under `docs/debug/` are the records.
    The public writeup (docs/banding.html) explains the full mechanism
    with a tidal-fragmentation diagram.
 
+   Engineering corollary (2026-07-15): the mechanism's compound scale is
+   exposed as `fluid_scale` (SimParams, slider, --fluid-scale, web
+   attribute fluid-scale): a similarity transform of the microphysics
+   (see design-simulation.md). Validated: pooled gaps scale 20 / 33-56 /
+   62 px and first ring 60 -> 119 px across scale 0.5/1/2, i.e. lambda ~
+   scale as (s*cs*(s*r_rep)^4/mu)^(1/5) = s predicts. Owner-found at
+   scale > 2: the neighbor cap bound constantly and exposed a residual
+   within-ring truncation bias (upward drift + oscillation); fixed by
+   nearest-N distance selection (see gotchas.md). field_clamp is not part
+   of the transform, so the clamp-adjacent inner zone stops scaling below
+   about 0.5.
+
    Also eliminated at converged dt: pole-face width (39.8 / 42.7 / 39.5
    across 4x), magnet shape (point dipole 35.7 vs bar 42, within scatter),
    and single-bar strength (non-monotone within scatter across 0.15..0.6

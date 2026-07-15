@@ -11,8 +11,11 @@ Reynolds) regime: inertia is negligible and Stokes drag dominates. So there is
 no acceleration state; each step computes a velocity directly:
 
 ```
-v_i = mobility * (F_field(x_i) + F_pair(i)) + advection(x_i) + brownian
-x_i += v_i * dt        (dt fixed and clamped, speed capped; see gotchas)
+v_i = mobility * grad(|B|^2)(x_i)   (speed-capped)
+    + v_pair(i)                     (chain attraction + soft-core repulsion,
+                                     direct velocity scales)
+    + brownian + wall
+x_i += v_i * dt        (fixed dt; per-term speed caps; see gotchas)
 ```
 
 A full fluid solver (Navier-Stokes, ferrofluid magnetization) was considered
@@ -85,6 +88,9 @@ The owner wants visible chain textures, so chains are simulated, not faked:
   chains compress in stronger fields.
 - A soft-core repulsion at very short range gives particles finite size and
   prevents collapse into a point at field maxima.
+- Pair contributions per particle are capped at the N nearest neighbors
+  (`chain_max_neighbors`, distance-selected; see the neighbor-cap entries
+  in [gotchas.md](gotchas.md) for why order-based truncation is forbidden).
 
 Neighbor search uses a uniform spatial hash grid rebuilt each frame; the same
 grid serves both pair forces and soft-core repulsion. Interactions are
@@ -99,6 +105,22 @@ at modest particle counts. See
 Rejected alternative: orientation-only fake chains (aligned strokes with no
 pair force). Cheaper, but chains would not connect, bend around field lines,
 or break when hands pass, and the owner asked for the real texture.
+
+## Fluid scale (the band-size dial)
+
+`SimParams::fluid_scale` applies a similarity transform to the particle
+microphysics: all micro-lengths (repulsion_radius, chain_spacing,
+chain_range) and micro-velocities (chain_strength, repulsion_strength,
+noise, chain_speed_cap) are multiplied together, preserving every
+dimensionless ratio that governs melting, chaining, and texture. The band
+wavelength scales linearly with it (validated 0.5x..2x; mechanism: the
+tidal-fragmentation scale (cs*r_rep^4/mu)^(1/5), see
+[research-chain-banding.md](research-chain-banding.md)). Not scaled, by
+design: the field, dish, hand geometry, mobility, max_speed, dt, and
+field_clamp; consequently the clamp-adjacent zone near poles does not
+shrink below scale ~0.5. Physically it selects a coarser or finer fluid:
+at the owner's 20 cm dish target, scale 1 means ~1.2 mm repulsion cores
+and ~7.5 mm bands.
 
 ## Secondary effects
 

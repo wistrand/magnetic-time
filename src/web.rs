@@ -221,6 +221,13 @@ impl WebHandle {
         self.push();
     }
 
+    /// Fluid coarseness: similarity transform of the particle microphysics;
+    /// the band wavelength scales linearly with it.
+    pub fn set_fluid_scale(&self, v: f64) {
+        self.config.borrow_mut().sim.fluid_scale = v.clamp(0.1, 8.0);
+        self.push();
+    }
+
     /// Render-buffer resolution cap in pixels per side; 0 = native.
     pub fn set_max_px(&self, v: u32) {
         self.config.borrow_mut().style.max_px = v;

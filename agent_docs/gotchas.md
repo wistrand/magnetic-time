@@ -103,21 +103,23 @@ what implementation teaches; correct entries that turn out wrong.
 - After changing any `#[wasm_bindgen]` signature, the JS glue in
   `docs/app/pkg/` is stale until the owner reruns `scripts/build-web.sh`.
 
-## Findings from the neighbor-cap bias fix
+## Findings from the neighbor-cap bias fixes (two rounds)
 
 - The chain pair force caps its neighbor count (chain_max_neighbors). When
-  the cap binds, WHICH neighbors count depends on hash iteration order; the
-  original raster-order scan (cells top-to-bottom, left-to-right) kept
-  upper-left neighbors, giving capped runs a net force bias that visibly
-  drifted bands toward the upper left (owner-found at cap ~12).
-  `SpatialHash::for_near` now visits cells nearest ring first, so a binding
-  cap keeps the closest neighbors: isotropic and physically right for a
-  1/r^4 force. Keep any future capped/truncated neighbor loops
-  distance-ordered, never scan-ordered.
-- The fix re-baselined default dumps slightly (the cap binds inside dense
-  clumps even at 48); character unchanged, verified visually 2026-07-15.
-  Any low-cap experiment data from before the fix is contaminated by the
-  drift artifact.
+  the cap binds, WHICH neighbors count must not depend on iteration order.
+  Round 1 (owner-found at cap ~12): raster-order cell scanning kept
+  upper-left neighbors and drifted bands up-left; fixed by visiting hash
+  cells nearest ring first. Round 2 (owner-found at fluid_scale > 2, where
+  the cap binds constantly): the residual raster order WITHIN each ring
+  still biased upward and caused band oscillation; fixed properly by
+  gathering all in-range candidates and truncating to the N NEAREST by
+  distance (`select_nth_unstable_by` in the pass-2 loop). The rule, now
+  twice-earned: capped neighbor sets must be distance-SELECTED, never
+  order-truncated.
+- Each fix re-baselined dense-clump behavior slightly (the cap binds there
+  even at 48); character unchanged, verified visually. Capped-regime data
+  predating 2026-07-15 nearest-N selection is contaminated at high
+  fluid_scale or low caps.
 
 ## Findings from the dt-convergence check
 

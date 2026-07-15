@@ -71,6 +71,14 @@ pub struct SimParams {
     /// larger). Exposed 2026-07-15 to test whether the band wavelength is
     /// seeded by this scale.
     pub field_clamp: f64,
+    /// Fluid coarseness: a similarity transform of the particle
+    /// microphysics. Scales all micro-lengths (repulsion_radius,
+    /// chain_spacing, chain_range) and micro-velocities (chain_strength,
+    /// repulsion_strength, noise, chain_speed_cap) together, preserving
+    /// every dimensionless ratio. The band wavelength scales linearly with
+    /// it (tidal-fragmentation scale delta* ~ (cs*r_rep^4/mu)^(1/5); see
+    /// research-chain-banding.md).
+    pub fluid_scale: f64,
     pub seed: u64,
 }
 
@@ -105,6 +113,7 @@ impl Default for SimParams {
             chain_speed_cap: 0.12,
             chain_max_neighbors: 48,
             field_clamp: crate::field::MIN_DIST,
+            fluid_scale: 1.0,
             seed: 1,
         }
     }
@@ -299,9 +308,22 @@ impl Sim {
     /// integrate. Result is independent of particle order and thread
     /// scheduling (noise streams are keyed by particle index and step).
     pub fn step(&mut self, sources: &FieldSources) {
-        let p = self.params;
-        // The hash cell size tracks repulsion_radius; rebuild the grid when
-        // the radius is changed live.
+        let mut p = self.params;
+        // Fluid coarseness: similarity-transform the microphysics (all
+        // micro-lengths and micro-velocities together) so the pattern
+        // rescales without changing character. See SimParams::fluid_scale.
+        let fs = p.fluid_scale;
+        if fs != 1.0 {
+            p.repulsion_radius *= fs;
+            p.chain_spacing *= fs;
+            p.chain_range *= fs;
+            p.chain_strength *= fs;
+            p.repulsion_strength *= fs;
+            p.noise *= fs;
+            p.chain_speed_cap *= fs;
+        }
+        // The hash cell size tracks the effective repulsion radius; rebuild
+        // the grid when it changes live.
         if (self.hash.cell - p.repulsion_radius).abs() > f64::EPSILON {
             self.hash = SpatialHash::new(p.repulsion_radius);
         }
@@ -365,10 +387,14 @@ impl Sim {
             // Neighbor forces: soft-core repulsion (never speed-capped; it
             // must win locally or clumps collapse) plus the dipole-dipole
             // pair force that strings beads into chains along field lines.
+            // Chain candidates are gathered first and truncated to the N
+            // NEAREST when over the cap: distance-selected truncation is
+            // isotropic and stable, where visit-order truncation drifted
+            // bands toward the scan direction (owner-found at high
+            // fluid_scale, where the cap binds constantly).
             let (mi, wi) = (field[i].dir, field[i].w);
             let mut rep = Vec2::ZERO;
-            let mut chain_v = Vec2::ZERO;
-            let mut pairs = 0u32;
+            let mut cand: Vec<(usize, f64)> = Vec::with_capacity(64);
             hash.for_near(pos, k_cells, |j| {
                 if j == i {
                     return;
@@ -381,28 +407,37 @@ impl Sim {
                 if dist < r_rep {
                     rep += (d / dist) * (1.0 - dist / r_rep);
                 }
-                if chains && dist < p.chain_range && pairs < p.chain_max_neighbors {
-                    let w = wi * field[j].w;
-                    if w < 1e-3 {
-                        return;
-                    }
-                    // Attraction floor: bead spacing, tightened for strongly
-                    // magnetized pairs (field-dependent chain compression).
-                    let floor = p.chain_spacing * (1.0 - p.chain_compress * w);
-                    if dist < floor {
-                        return;
-                    }
-                    pairs += 1;
-                    let rh = d / dist;
-                    let mj = field[j].dir;
-                    let (mir, mjr, mm) = (mi.dot(rh), mj.dot(rh), mi.dot(mj));
-                    // Point dipole-dipole force direction on i (r_hat points
-                    // j -> i): head-to-tail attracts, side-by-side repels.
-                    let bracket = mi * mjr + mj * mir + rh * (mm - 5.0 * mir * mjr);
-                    let fall = (r_rep / dist).powi(4);
-                    chain_v += bracket * (p.chain_strength * w * fall);
+                if chains && dist < p.chain_range {
+                    cand.push((j, dist));
                 }
             });
+            let cap = p.chain_max_neighbors as usize;
+            if cand.len() > cap {
+                cand.select_nth_unstable_by(cap, |a, b| a.1.total_cmp(&b.1));
+                cand.truncate(cap);
+            }
+            let mut chain_v = Vec2::ZERO;
+            for &(j, dist) in &cand {
+                let w = wi * field[j].w;
+                if w < 1e-3 {
+                    continue;
+                }
+                // Attraction floor: bead spacing, tightened for strongly
+                // magnetized pairs (field-dependent chain compression).
+                let floor = p.chain_spacing * (1.0 - p.chain_compress * w);
+                if dist < floor {
+                    continue;
+                }
+                let d = pos - positions[j];
+                let rh = d / dist;
+                let mj = field[j].dir;
+                let (mir, mjr, mm) = (mi.dot(rh), mj.dot(rh), mi.dot(mj));
+                // Point dipole-dipole force direction on i (r_hat points
+                // j -> i): head-to-tail attracts, side-by-side repels.
+                let bracket = mi * mjr + mj * mir + rh * (mm - 5.0 * mir * mjr);
+                let fall = (r_rep / dist).powi(4);
+                chain_v += bracket * (p.chain_strength * w * fall);
+            }
             v += rep * p.repulsion_strength;
             let cl = chain_v.len();
             if cl > p.chain_speed_cap {
@@ -493,8 +528,9 @@ impl Sim {
     /// Pairs currently within chain interaction range (both magnetized),
     /// for the chains debug view.
     pub fn chain_bonds(&self) -> Vec<(Vec2, Vec2)> {
-        let cut = self.params.chain_range;
-        let k = ((cut / self.params.repulsion_radius).ceil() as i32).clamp(1, 4);
+        let cut = self.params.chain_range * self.params.fluid_scale;
+        let k = ((cut / (self.params.repulsion_radius * self.params.fluid_scale)).ceil() as i32)
+            .clamp(1, 4);
         let mut out = Vec::new();
         for i in 0..self.pos.len() {
             if self.field[i].w < 0.15 {

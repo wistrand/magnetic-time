@@ -350,6 +350,11 @@ impl ClockApp {
                             .text("field clamp"),
                     );
                     ui.add(
+                        egui::Slider::new(&mut p.fluid_scale, 0.25..=4.0)
+                            .logarithmic(true)
+                            .text("fluid scale"),
+                    );
+                    ui.add(
                         egui::Slider::new(&mut p.drag_coupling, 0.0..=1.0)
                             .text("drag coupling"),
                     );
