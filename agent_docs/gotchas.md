@@ -119,6 +119,18 @@ what implementation teaches; correct entries that turn out wrong.
   Any low-cap experiment data from before the fix is contaminated by the
   drift artifact.
 
+## Findings from the dt-convergence check
+
+- The default physics step (dt = 1/30) under-resolves the stiff chain and
+  repulsion dynamics enough to bias emergent pattern scales: the selected
+  band wavelength at default dt is ~30% below its dt-converged value
+  (converged for dt <= 1/120). Fine for the art; not fine for
+  measurements. Quantitative pattern studies must set `--dt 0.008333` or
+  finer and expect ~4x the runtime.
+- Noise at fixed dt does NOT move the wavelength across a 256x effective-
+  diffusion range, so the known D ~ noise^2*dt noise-model wart is not the
+  mechanism; it is integrator overshoot in the deterministic forces.
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears

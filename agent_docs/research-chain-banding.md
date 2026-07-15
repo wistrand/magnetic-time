@@ -361,15 +361,69 @@ creep, step budget); the dumps under `docs/debug/` are the records.
    magnet strength, dt, chain_speed_cap, chain_max_neighbors) were all
    given sliders and CLI flags on 2026-07-15 for this question, and the
    owner then tested them manually: no correlation with the wavelength.
-   Status: open question with every parameter eliminated at manual-test
-   resolution. The system selects a robust ~0.075-unit wavelength during
-   condensation; whatever picks it appears emergent from the early
-   condensation dynamics (the t=30 fine rings consolidate to this scale by
-   t~60-90 and freeze), not any single knob. Side result of the manual
-   test: low chain_max_neighbors exposed a scan-order force bias (bands
-   drifting upper-left), fixed by distance-ordering neighbor visits; see
-   [gotchas.md](gotchas.md). Low-cap observations from before that fix are
-   contaminated.
+   Side result of the manual test: low chain_max_neighbors exposed a
+   scan-order force bias (bands drifting upper-left), fixed by
+   distance-ordering neighbor visits; see [gotchas.md](gotchas.md).
+   Observations and sweep numbers from before that fix are contaminated
+   (the fix alone shifted the default-condition spacing from ~34 to ~29
+   px); all numbers below are post-fix, same-code, 3 seeds, cs 0.06,
+   t=150 s.
+
+   Aliasing checks (owner suggestion, 2026-07-15): is the wavelength an
+   artifact of a discrete substrate rather than physics?
+
+   - Pixel/render grid: ruled out. The sim is size-independent by
+     construction, and a size-2000 render downscaled to 1000 reproduces
+     ring radii exactly under the standard detector.
+   - Spatial hash cell (= repulsion_radius): 25.3 / 28.6 / 31.2 px across
+     a 4x cell range; within seed scatter, no dependence.
+   - Initial-condition / RNG structure (the Ulam/Sacks analogue): ruled
+     out by seed independence and by the noise null below.
+   - Noise at fixed dt: 34.3 / 28.6 / 30.8 px across noise 0.002..0.032
+     (a 256x range in effective diffusion). Flat. The D ~ noise^2*dt
+     modeling wart exists but does not select the wavelength.
+   - TIME DISCRETIZATION: the one real hit, and the first knob ever to
+     move the wavelength. dt = 1/240, 1/120, 1/30, 1/10 gives 40.0, 42.7,
+     28.6, 25.5 px: converged at ~41-43 px for dt <= 1/120, compressed
+     ~30% at the default dt = 1/30. The effect is integrator overshoot in
+     the stiff chain/repulsion dynamics (not the noise model, per the
+     fixed-dt noise null).
+
+   Status: a converged, dt-independent wavelength exists (~0.087 dial
+   units), so the pattern is physical, but every earlier sweep ran at the
+   biased default dt. The invariance conclusions (max_speed, density,
+   chain_range, etc.) were measured under internally consistent conditions
+   and likely carry over, but have not been re-verified at fine dt. What
+   selects the converged wavelength remains open; quantitative pattern
+   work should use dt <= 1/120 from now on.
+
+   OWNER THEORY, TESTED 2026-07-15: the bands are a standing balance
+   between noise and particle transport speed. Decisive sweeps at
+   converged dt (1/120), hour pole, 3 seeds (scatter ~+-30%, treat
+   exponents as rough):
+
+   - noise 0.002 / 0.008 / 0.032 -> spacing 35.5 / 42.0 / 61.2 px.
+     Monotone INCREASE. At default dt this was flat, so integrator error
+     masks the thermal-noise dependence there.
+   - mobility 1e-8 / 2e-8 / 4e-8 -> 66.7 / 42.0 / 37.3 px. Monotone
+     DECREASE (mobility sets the uncapped drift at ring radii; this is
+     why max_speed nulls never meant anything about transport).
+   - VERDICT: supported in direction. Spacing grows with noise and shrinks
+     with transport speed: a diffusion-vs-drift balance length. The
+     precise law is open (rough fit lambda ~ noise^0.2 * mobility^-0.4;
+     needs many-seed sweeps), and the dt bias direction (coarser dt ->
+     SMALLER spacing) is opposite to what "integrator error acts as extra
+     noise" would give, so the dt mechanism is a separate open point.
+
+   Also eliminated at converged dt: pole-face width (39.8 / 42.7 / 39.5
+   across 4x), magnet shape (point dipole 35.7 vs bar 42, within scatter),
+   and single-bar strength (non-monotone within scatter across 0.15..0.6
+   at two ages; the earlier two-pole spacing difference, hour 42 vs minute
+   22, is therefore suspect as a minute-pole measurement-geometry artifact
+   rather than physics). And the wavelength is NOT reducible to chainlet
+   length: across the dt change that moves spacing 1.49x, median chainlet
+   length moves only 8.5 -> 9.6 px (1.13x). Band thickness and band
+   spacing are set by different physics.
 
 8. Template reproduction. Seed one band next to uniform gas (pointer);
    does it accrete an adjacent row (autocatalytic lateral growth)? This is
