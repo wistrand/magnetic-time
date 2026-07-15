@@ -1,22 +1,21 @@
 # Gotchas and findings
 
-Non-obvious traps and decision history. Everything below is anticipated from
-planning (no code exists yet); confirm or correct entries as implementation
-lands, and add what implementation teaches.
+Non-obvious traps and decision history, in rough chronological order. Add
+what implementation teaches; correct entries that turn out wrong.
 
-## Numerics (anticipated)
+## Numerics (confirmed in practice)
 
-- Dipole fields diverge as 1/|r|^3 at the source. Clamp the evaluation
-  distance to a minimum radius or forces explode for particles that reach a
-  magnet.
-- The attraction near field maxima is stiff. Explicit integration needs the
-  clamped dt plus a per-step speed cap, or particles overshoot and oscillate
-  across the magnet. If capping visibly distorts motion, switch to
-  semi-implicit or substep near maxima.
-- Brownian noise must come from a seeded deterministic RNG or headless dumps
-  stop being reproducible.
+- Dipole fields diverge as 1/|r|^3 at the source. Evaluation distance is
+  clamped (MIN_DIST in `src/field.rs`, or the disc radius); without it forces
+  explode for particles that reach a magnet. Side effect: the field plateaus
+  inside the clamp, so tip clusters form shells (see phase-3 findings).
+- The attraction near field maxima is stiff. The fixed dt plus per-term speed
+  caps hold it stable; cluster cores jitter at the cap instead of resting
+  (visually invisible at dot scale).
+- All randomness comes from seeded deterministic RNG streams keyed by
+  (particle, step) or headless dumps stop being reproducible.
 
-## egui / eframe (anticipated)
+## egui / eframe (confirmed in practice)
 
 - Never render particles as per-particle egui shapes; tessellation collapses
   around thousands of primitives. The pixel-buffer texture path exists for

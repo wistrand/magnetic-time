@@ -21,7 +21,7 @@ const ATTRS = [
   "particles", "speed", "stroke-len", "palette", "bg", "show-hands", "dev-panel",
   "mobility", "max-speed", "noise", "repulsion",
   "chain-strength", "chain-spacing", "chain-range", "chain-compress", "drag",
-  "pointer-strength", "pointer-radius", "max-px",
+  "pointer-strength", "pointer-radius", "pointer-visual", "max-px",
 ];
 
 class MagneticClock extends HTMLElement {
@@ -109,6 +109,7 @@ class MagneticClock extends HTMLElement {
           case "drag": h.set_drag(v); break;
           case "pointer-strength": h.set_pointer_strength(v); break;
           case "pointer-radius": h.set_pointer_radius(v); break;
+          case "pointer-visual": h.set_pointer_visual(v); break;
           case "max-px": h.set_max_px(v); break;
         }
       } catch (e) {

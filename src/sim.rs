@@ -54,8 +54,18 @@ pub struct SimParams {
     pub pointer_strength: f64,
     /// Pointer magnet disc radius (near-field softness), dial units.
     pub pointer_radius: f64,
+    /// How much of the pointer's field enters the display/magnetization
+    /// field (0..=1). Force always uses the full field; without attenuation
+    /// the pointer saturates stroke color and orientation across the whole
+    /// dish (its 1/r^2 magnitude exceeds b_sat everywhere at useful
+    /// strengths).
+    pub pointer_visual: f64,
     pub seed: u64,
 }
+
+/// Per-step low-pass factor for the display weight `w_disp`; press/release
+/// fades over roughly 5 steps (~1/6 display-second) instead of flashing.
+const W_DISP_SMOOTH: f64 = 0.2;
 
 /// Cap on the summed chain velocity per particle, units/s (stability).
 const CHAIN_SPEED_CAP: f64 = 0.12;
@@ -86,6 +96,7 @@ impl Default for SimParams {
             drag_coupling: 0.0,
             pointer_strength: 30.0,
             pointer_radius: 0.05,
+            pointer_visual: 0.03,
             seed: 1,
         }
     }
@@ -190,9 +201,11 @@ impl SpatialHash {
 pub struct FieldSample {
     /// Induced moment direction (unit local B), for chaining and strokes.
     pub dir: Vec2,
-    /// Moment saturation weight 0..=1 (|B|/b_sat capped); scales chaining
-    /// and the stroke look.
+    /// Moment saturation weight 0..=1 (|B|/b_sat capped); scales chaining.
     pub w: f64,
+    /// Low-passed copy of `w` for rendering, so pointer press/release fades
+    /// instead of flashing. Physics uses the instant `w`.
+    pub w_disp: f64,
     /// Speed-capped magnetic velocity term.
     fv: Vec2,
 }
@@ -206,6 +219,9 @@ pub struct Sim {
     vel_smooth: Vec<Vec2>,
     /// Per-particle field samples from the last step.
     pub field: Vec<FieldSample>,
+    /// Scratch for pass 1 so the previous step's `w_disp` stays readable
+    /// during the parallel fill.
+    field_scratch: Vec<FieldSample>,
     /// Steps taken; also the noise stream selector, so noise is deterministic
     /// and independent of thread scheduling.
     step_index: u64,
@@ -227,6 +243,7 @@ impl Sim {
             vel: vec![Vec2::ZERO; params.count],
             vel_smooth: vec![Vec2::ZERO; params.count],
             field: vec![FieldSample::default(); params.count],
+            field_scratch: vec![FieldSample::default(); params.count],
             step_index: 0,
             hash: SpatialHash::new(params.repulsion_radius),
             params,
@@ -245,6 +262,7 @@ impl Sim {
             self.vel.truncate(n);
             self.vel_smooth.truncate(n);
             self.field.truncate(n);
+            self.field_scratch.truncate(n);
             // The hash still holds dangling indices until the next step.
             self.hash.build(&self.pos);
         } else {
@@ -255,6 +273,7 @@ impl Sim {
                 self.vel.push(Vec2::ZERO);
                 self.vel_smooth.push(Vec2::ZERO);
                 self.field.push(FieldSample::default());
+                self.field_scratch.push(FieldSample::default());
             }
         }
     }
@@ -291,14 +310,29 @@ impl Sim {
                 if sp > p.max_speed {
                     fv = fv * (p.max_speed / sp);
                 }
+                // Display/magnetization field: the force uses the full field,
+                // but the pointer magnet's contribution is attenuated here or
+                // it would saturate w and reorient every stroke dish-wide.
+                let b = b - sources.pointer_b(pos) * (1.0 - p.pointer_visual);
                 let bl = b.len();
+                let w = (bl / p.b_sat).min(1.0);
                 FieldSample {
                     dir: if bl > 1e-12 { b / bl } else { Vec2::ZERO },
-                    w: (bl / p.b_sat).min(1.0),
+                    w,
+                    w_disp: w,
                     fv,
                 }
             })
-            .collect_into_vec(&mut self.field);
+            .collect_into_vec(&mut self.field_scratch);
+
+        // Carry the low-passed display weight over from the previous step.
+        self.field
+            .par_iter_mut()
+            .zip(&self.field_scratch)
+            .for_each(|(old, new)| {
+                let w_disp = old.w_disp + (new.w - old.w_disp) * W_DISP_SMOOTH;
+                *old = FieldSample { w_disp, ..*new };
+            });
 
         // Pass 2: velocities.
         let (positions, field, hash) = (&self.pos, &self.field, &self.hash);

@@ -214,6 +214,13 @@ impl WebHandle {
         self.push();
     }
 
+    /// The pointer's weight in stroke color/orientation (0..=1); force is
+    /// unaffected.
+    pub fn set_pointer_visual(&self, v: f64) {
+        self.config.borrow_mut().sim.pointer_visual = v.clamp(0.0, 1.0);
+        self.push();
+    }
+
     /// Render-buffer resolution cap in pixels per side; 0 = native.
     pub fn set_max_px(&self, v: u32) {
         self.config.borrow_mut().style.max_px = v;

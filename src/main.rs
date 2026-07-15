@@ -73,6 +73,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
                      [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
+                     [--pointer-visual F]  pointer weight in stroke color/orientation
                      [--grad-check]  verify analytic field gradient, then exit
                      [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
                      one value applies to all hands
@@ -177,6 +178,11 @@ fn parse_args() -> Result<Options, String> {
                 opts.sim.pointer_radius = value("--pointer-radius", &mut args)?
                     .parse()
                     .map_err(|e| format!("--pointer-radius: {e}"))?
+            }
+            "--pointer-visual" => {
+                opts.sim.pointer_visual = value("--pointer-visual", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--pointer-visual: {e}"))?
             }
             "--magnets" => opts.magnets = field::parse_magnets(&value("--magnets", &mut args)?)?,
             "--strengths" => {

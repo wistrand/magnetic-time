@@ -272,6 +272,11 @@ pub fn build_layouts(specs: &[LayoutSpec; 3]) -> [HandMagnets; 3] {
 pub struct FieldSources {
     elements: Vec<Element>,
     pub markers: Vec<Marker>,
+    /// The interactive pointer magnet (pos, q, r_min) when active. Kept
+    /// separately so the sim can attenuate it in the display/magnetization
+    /// field: the pointer must be strong to exert force (F ~ grad|B|^2) but
+    /// would otherwise saturate stroke color and orientation dish-wide.
+    pointer: Option<(Vec2, f64, f64)>,
 }
 
 impl FieldSources {
@@ -332,7 +337,11 @@ impl FieldSources {
                 }
             }
         }
-        Self { elements, markers }
+        Self {
+            elements,
+            markers,
+            pointer: None,
+        }
     }
 
     /// Add the interactive pointer magnet: an axial disc magnet held against
@@ -340,16 +349,31 @@ impl FieldSources {
     /// charge (pole face), clamped over the disc radius. Appended by the app
     /// after the hand elements whenever the pointer is down.
     pub fn add_pointer(&mut self, pos: Vec2, strength: f64, radius: f64) {
+        let r_min = radius.max(MIN_DIST);
         self.elements.push(Element::Charge {
             pos,
             q: strength,
-            r_min: radius.max(MIN_DIST),
+            r_min,
         });
         self.markers.push(Marker {
             pos,
             dir: Vec2::ZERO,
             shape: MagnetShape::Disc { radius },
         });
+        self.pointer = Some((pos, strength, r_min));
+    }
+
+    /// The pointer magnet's own field contribution (zero when inactive).
+    /// Must match the Element::Charge branch of `b()`.
+    pub fn pointer_b(&self, p: Vec2) -> Vec2 {
+        match self.pointer {
+            None => Vec2::ZERO,
+            Some((pos, q, r_min)) => {
+                let dp = p - pos;
+                let dist = dp.len().max(r_min);
+                dp * (q / (dist * dist * dist))
+            }
+        }
     }
 
     /// Total field at a point. Dipole: k*(3(m.r_hat)r_hat - m)/|r|^3 with

@@ -335,6 +335,10 @@ impl ClockApp {
                         egui::Slider::new(&mut p.pointer_radius, 0.01..=0.2)
                             .text("pointer radius"),
                     );
+                    ui.add(
+                        egui::Slider::new(&mut p.pointer_visual, 0.0..=0.5)
+                            .text("pointer visual"),
+                    );
                 }
                 ui.add(
                     egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0)

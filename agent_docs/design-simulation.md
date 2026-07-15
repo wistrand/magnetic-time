@@ -45,12 +45,18 @@ field, not just the marker:
 A superparamagnetic bead is pulled toward high field magnitude regardless of
 sign: `F_field ∝ grad(|B|^2)`. Polarity still shapes the pattern through the
 structure of |B| (alternating poles create field nulls between magnets).
+B and grad(|B|^2) are computed analytically in one sweep
+(`FieldSources::b_and_grad_b2`: accumulate B and the Jacobian, gradient =
+2 J^T B). After any field-element change, run `--grad-check`, which compares
+against a numeric reference.
 
-Cost is dipole_count x particle_count per frame, parallelized with rayon.
-If this ever limits particle count, the planned optimization is to precompute
-each hand's `grad(|B|^2)` on a grid in the hand's local frame once at startup
-(the layout is rigid), then rotate-and-sample per particle: cost becomes
-independent of dipole count. Do not build this until profiling demands it.
+Cost is element_count x particle_count per step, parallelized with rayon.
+Before optimizing here, note the profiling finding in
+[gotchas.md](gotchas.md): at the owner presets the sim is neighbor-bound
+(chain/repulsion pass), not field-bound. If field cost ever dominates, the
+planned optimization is to precompute each hand's field on a grid in the
+hand's local frame once at startup (the layout is rigid), then
+rotate-and-sample per particle.
 
 ## Drag is the aesthetic core
 
@@ -96,6 +102,15 @@ or break when hands pass, and the owner asked for the real texture.
 
 ## Secondary effects
 
+- Pointer magnet (touch/mouse): a soft charge appended to the field while
+  the pointer is down. Its force uses the full field, but its contribution
+  to the display/magnetization field (stroke color, orientation, chain
+  weight rendering) is attenuated by `pointer_visual`. This split is
+  deliberate: F ~ grad(|B|^2) forces the pointer's |B| to exceed b_sat
+  dish-wide at useful strengths, which would flash every stroke white and
+  point it at the finger. The rendered weight `w_disp` is also low-passed
+  (W_DISP_SMOOTH in `src/sim.rs`) so press/release fades instead of
+  flashing. Do not "simplify" these back to the raw field.
 - Drag coupling (`drag_coupling`, 0 = off): XSPH-style velocity smoothing
   after the force pass; each particle's velocity blends toward the
   kernel-weighted mean of its neighbors' within `chain_range`. Models
@@ -117,9 +132,10 @@ One clock source produces "display time" from wall time and a speed multiplier
 not ticking; a ticking second hand fights the fluid look. Sim steps at fixed
 dt in display-time units, decoupled from frame rate.
 
-## Open questions
+## Resolved questions
 
-- Saturation cap and mobility values: pure tuning, resolve in the tuning phase
-  against the debug views.
-- Whether chains need a small alignment torque term (rotating m_i toward B
-  smoothly) or induced m_i = c*B is enough. Try the simple version first.
+- Saturation and mobility values: tuned by the owner; the current preset is
+  baked into the `Default` impls (`SimParams`, `default_specs`, `Style`) and
+  marked as owner-tuned in comments. Change only with the owner.
+- Alignment torque for chains: not needed; instant induced moments
+  (m_i along local B) produce convincing chains.

@@ -3,23 +3,25 @@ file in `agent_docs/`.
 
 ## What this is
 
-A Rust + egui desktop clock. The hands carry magnets (point dipoles, soft
-discs, or bar magnets built from pole-face charges). Above them sits a simulated liquid layer of magnetic particles
-in the overdamped regime: each frame, particle velocity is computed from the
-field gradient of the hand magnets plus short-range dipole-dipole interaction
-(chain formation) plus drag, noise, and boundary forces. Particles are
-rasterized into a CPU pixel buffer shown as an egui texture; the clock face and
-hands are egui vector shapes.
+A Rust + egui clock. The hands carry magnets (point dipoles, soft discs, or
+bar magnets built from pole-face charges). Above them sits a simulated liquid
+layer of magnetic particles in the overdamped regime: each fixed-dt step,
+particle velocity comes from the analytic field gradient of the hand magnets
+(plus an interactive pointer magnet), short-range dipole-dipole chaining,
+soft-core repulsion, optional drag coupling, noise, and the dish wall.
+Everything is rasterized into one CPU pixel buffer shown as an egui texture.
+Ships as a native app (with headless PNG mode for verification) and as a
+wasm `<magnetic-clock>` web component whose attributes reuse the CLI grammar.
 
-Phases 1-4 of [agent_docs/plan.md](agent_docs/plan.md) are built; tuning
-(phase 5) is ongoing with the owner.
+All plan phases are built and owner-tuned; the plan was promoted to
+[agent_docs/architecture.md](agent_docs/architecture.md).
 
 ## Layout
 
 | Path          | Role                                                |
 |---------------|-----------------------------------------------------|
 | `src/`        | application code                                    |
-| `agent_docs/` | plan, design decisions, gotchas (linked below)      |
+| `agent_docs/` | architecture, design decisions, gotchas (below)     |
 | `docs/`       | GitHub Pages site (index.html, img/), committed     |
 | `scripts/`    | owner-run helper scripts (web build)                |
 | `docs/app/`   | wasm build of the clock (pkg/ from build-web.sh)    |
@@ -40,7 +42,8 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --strengths F (one value, or hour,minute,second)
                                     #   --chain-strength F --chain-spacing F --chain-range F
                                     #   --chain-compress F --drag F
-                                    #   --pointer-strength F --pointer-radius F (touch/mouse magnet)
+                                    #   --pointer-strength F --pointer-radius F --pointer-visual F
+                                    #     (touch/mouse magnet; visual = weight in stroke color)
 magnetic-time --grad-check          # verify analytic field gradient vs numeric; run after
                                     # changing field elements (honors --magnets/--shapes)
                                     #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
@@ -56,10 +59,10 @@ lands.
 
 ## Docs
 
-- [agent_docs/plan.md](agent_docs/plan.md): phased build plan and status. Start here for any implementation work.
-- [agent_docs/design-simulation.md](agent_docs/design-simulation.md): physics model: dipole field, overdamped particles, chain formation. Read before touching sim code.
-- [agent_docs/design-rendering.md](agent_docs/design-rendering.md): pixel-buffer rendering, debug views, headless PNG dump.
-- [agent_docs/gotchas.md](agent_docs/gotchas.md): known traps (numeric stability, egui performance).
+- [agent_docs/architecture.md](agent_docs/architecture.md): module map, data flow, verification methodology, deferred work. Start here.
+- [agent_docs/design-simulation.md](agent_docs/design-simulation.md): physics model: field elements, overdamped particles, chains, drag coupling, pointer magnet. Read before touching sim code.
+- [agent_docs/design-rendering.md](agent_docs/design-rendering.md): pixel-buffer rendering, themes/palettes, debug views, headless PNG dump.
+- [agent_docs/gotchas.md](agent_docs/gotchas.md): traps and decision history (numerics, egui, wasm, presets).
 
 ## Invariants
 

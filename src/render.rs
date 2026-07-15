@@ -627,7 +627,7 @@ fn draw_particles(
             fb.dot_ink(x, y, pr, [c[0], c[1], c[2]], 0.9, dark);
             continue;
         }
-        let w = sim.field[i].w as f32;
+        let w = sim.field[i].w_disp as f32;
         if w > 0.15 && style.stroke_len > 0.0 {
             // Magnetized: a short stroke along the local field. Aligned
             // neighbors visually fuse into chains / spike-like filaments.

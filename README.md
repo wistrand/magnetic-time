@@ -6,7 +6,12 @@ field of the hands, lagging with viscous drag: slow hands carry their
 particles, the second hand outruns its own and plows rings, wakes, and comet
 trails that slowly relax. Every pattern on the dial is simulated, not painted.
 
-Native Rust application rendered with egui.
+Native Rust application rendered with egui; also builds to WebAssembly as a
+`<magnetic-clock>` web component. Magnet layout, shape, and strength are
+configurable per hand (point dipoles, discs, bar magnets), with chain physics
+and drag coupling tunables, five color palettes, light/dark backgrounds with
+adaptive ink rendering, and touch/mouse interaction (drag a disc magnet
+through the particles).
 
 ![The default preset: concentric particle rings on a dark dial](docs/img/rings.png)
 
@@ -33,8 +38,8 @@ See `cargo run -- --help` for all flags.
 ## Development
 
 Agent-oriented docs live in [CLAUDE.md](CLAUDE.md) and
-[agent_docs/](agent_docs/); the build plan is
-[agent_docs/plan.md](agent_docs/plan.md).
+[agent_docs/](agent_docs/); start with
+[agent_docs/architecture.md](agent_docs/architecture.md).
 
 ## License
 
