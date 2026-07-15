@@ -34,11 +34,13 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     # more flags: --view field,quiver,dipoles,velocity,hash,chains
                                     #   --particles N --seed N --size PX --stroke-len F
                                     #   --palette ice|ember|emerald|violet|mono --bg RRGGBB
+                                    #   --max-px N (interactive resolution cap, 0 = off)
                                     #   --mobility F --max-speed F --noise F --repulsion F
                                     #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
                                     #   --strengths F (one value, or hour,minute,second)
                                     #   --chain-strength F --chain-spacing F --chain-range F
                                     #   --chain-compress F --drag F
+                                    #   --pointer-strength F --pointer-radius F (touch/mouse magnet)
 magnetic-time --grad-check          # verify analytic field gradient vs numeric; run after
                                     # changing field elements (honors --magnets/--shapes)
                                     #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;

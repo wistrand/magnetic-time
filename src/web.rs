@@ -202,4 +202,21 @@ impl WebHandle {
         self.config.borrow_mut().sim.drag_coupling = v.clamp(0.0, 1.0);
         self.push();
     }
+
+    /// Touch/mouse magnet strength; 0 disables interaction.
+    pub fn set_pointer_strength(&self, v: f64) {
+        self.config.borrow_mut().sim.pointer_strength = v.max(0.0);
+        self.push();
+    }
+
+    pub fn set_pointer_radius(&self, v: f64) {
+        self.config.borrow_mut().sim.pointer_radius = v.clamp(0.005, 0.5);
+        self.push();
+    }
+
+    /// Render-buffer resolution cap in pixels per side; 0 = native.
+    pub fn set_max_px(&self, v: u32) {
+        self.config.borrow_mut().style.max_px = v;
+        self.push();
+    }
 }

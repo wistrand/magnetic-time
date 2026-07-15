@@ -158,6 +158,10 @@ pub struct Style {
     /// Background color; all face colors and the particle blend mode derive
     /// from it (see Theme).
     pub bg: [u8; 3],
+    /// Interactive render-buffer cap (pixels per side); 0 = native
+    /// resolution. The texture upscales linearly, trading sharpness for
+    /// raster cost. Headless --size is unaffected.
+    pub max_px: u32,
 }
 
 // Part of the owner-tuned "rings" preset: hands hidden, time read from the
@@ -169,6 +173,7 @@ impl Default for Style {
             show_hands: false,
             palette: Palette::Ice,
             bg: DEFAULT_BG,
+            max_px: 700,
         }
     }
 }

@@ -67,10 +67,12 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--view field,quiver,dipoles,velocity,hash]
                      [--particles N] [--seed N] [--stroke-len F]
                      [--palette ice|ember|emerald|violet|mono] [--bg RRGGBB]
+                     [--max-px N]  cap interactive render resolution (0 = off)
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
+                     [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
                      [--grad-check]  verify analytic field gradient, then exit
                      [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
                      one value applies to all hands
@@ -166,6 +168,16 @@ fn parse_args() -> Result<Options, String> {
                     .parse()
                     .map_err(|e| format!("--drag: {e}"))?
             }
+            "--pointer-strength" => {
+                opts.sim.pointer_strength = value("--pointer-strength", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--pointer-strength: {e}"))?
+            }
+            "--pointer-radius" => {
+                opts.sim.pointer_radius = value("--pointer-radius", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--pointer-radius: {e}"))?
+            }
             "--magnets" => opts.magnets = field::parse_magnets(&value("--magnets", &mut args)?)?,
             "--strengths" => {
                 strengths = Some(field::parse_strengths(&value("--strengths", &mut args)?)?)
@@ -180,6 +192,11 @@ fn parse_args() -> Result<Options, String> {
                 opts.style.palette = render::Palette::parse(&value("--palette", &mut args)?)?
             }
             "--bg" => opts.style.bg = render::parse_color(&value("--bg", &mut args)?)?,
+            "--max-px" => {
+                opts.style.max_px = value("--max-px", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--max-px: {e}"))?
+            }
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
             "--grad-check" => opts.grad_check = true,

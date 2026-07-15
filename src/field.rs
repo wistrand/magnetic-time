@@ -335,6 +335,23 @@ impl FieldSources {
         Self { elements, markers }
     }
 
+    /// Add the interactive pointer magnet: an axial disc magnet held against
+    /// the dish, whose in-plane field is radial. Modeled as a single soft
+    /// charge (pole face), clamped over the disc radius. Appended by the app
+    /// after the hand elements whenever the pointer is down.
+    pub fn add_pointer(&mut self, pos: Vec2, strength: f64, radius: f64) {
+        self.elements.push(Element::Charge {
+            pos,
+            q: strength,
+            r_min: radius.max(MIN_DIST),
+        });
+        self.markers.push(Marker {
+            pos,
+            dir: Vec2::ZERO,
+            shape: MagnetShape::Disc { radius },
+        });
+    }
+
     /// Total field at a point. Dipole: k*(3(m.r_hat)r_hat - m)/|r|^3 with
     /// k=1. Charge: q*r_hat/|r|^2.
     pub fn b(&self, p: Vec2) -> Vec2 {

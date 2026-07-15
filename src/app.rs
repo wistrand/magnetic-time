@@ -9,6 +9,7 @@ use crate::field::{
 };
 use crate::render::{draw_clock, DebugViews, Framebuffer, Style};
 use crate::sim::{Sim, SimParams};
+use crate::vec2::Vec2;
 
 /// Wall-clock budget for catch-up physics per frame. If stepping to "now"
 /// would take longer (huge speed multiplier or a stall), the particles skip
@@ -39,6 +40,10 @@ pub struct ClockApp {
     show_panel: bool,
     /// External config updates, drained each frame.
     pending: Option<PendingConfig>,
+    /// Active pointer magnet: position in clock units plus screen position
+    /// for the feedback ring. Set while the primary button/touch is down
+    /// over the dial.
+    pointer: Option<(Vec2, egui::Pos2)>,
     sim: Sim,
     /// Display time the sim has been stepped to.
     sim_time: f64,
@@ -68,6 +73,7 @@ impl ClockApp {
             style,
             show_panel,
             pending,
+            pointer: None,
             sim: Sim::new(params),
             sim_time,
             fb: Framebuffer::new(8, 8),
@@ -97,6 +103,19 @@ impl ClockApp {
         }
     }
 
+    /// Field sources for a display time, including the pointer magnet while
+    /// it is down.
+    fn sources_at(&self, t: f64) -> FieldSources {
+        let mut sources = FieldSources::at_time(&self.layouts, t);
+        if let Some((world, _)) = self.pointer {
+            let p = &self.sim.params;
+            if p.pointer_strength > 0.0 {
+                sources.add_pointer(world, p.pointer_strength, p.pointer_radius);
+            }
+        }
+        sources
+    }
+
     /// Step the sim in fixed dt up to the current display time, bounded by a
     /// wall-clock budget.
     fn step_sim_to(&mut self, now: f64) {
@@ -111,7 +130,7 @@ impl ClockApp {
                 self.sim_time = now;
                 return;
             }
-            let sources = FieldSources::at_time(&self.layouts, self.sim_time);
+            let sources = self.sources_at(self.sim_time);
             self.sim.step(&sources);
             self.sim_time += dt;
         }
@@ -132,7 +151,14 @@ impl ClockApp {
             .resizable(false)
             .default_width(180.0)
             .show(ctx, |ui| {
-                ui.heading("dev");
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    self.dev_panel_contents(ui);
+                });
+            });
+    }
+
+    fn dev_panel_contents(&mut self, ui: &mut egui::Ui) {
+        ui.heading("dev");
                 ui.label(format!("time  {}", format_time(self.clock.now())));
                 ui.add(
                     egui::Slider::new(&mut self.speed, 0.1..=10000.0)
@@ -301,10 +327,22 @@ impl ClockApp {
                         egui::Slider::new(&mut p.drag_coupling, 0.0..=1.0)
                             .text("drag coupling"),
                     );
+                    ui.add(
+                        egui::Slider::new(&mut p.pointer_strength, 0.0..=150.0)
+                            .text("pointer strength"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.pointer_radius, 0.01..=0.2)
+                            .text("pointer radius"),
+                    );
                 }
                 ui.add(
                     egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0)
                         .text("stroke length"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut self.style.max_px, 0..=2048)
+                        .text("res cap px (0 = off)"),
                 );
                 ui.checkbox(&mut self.style.show_hands, "show hands");
                 ui.horizontal(|ui| {
@@ -351,7 +389,6 @@ impl ClockApp {
                 if let Some(status) = &self.dump_status {
                     ui.label(status.clone());
                 }
-            });
     }
 }
 
@@ -376,12 +413,34 @@ impl eframe::App for ClockApp {
                 let avail = ui.available_rect_before_wrap();
                 let side_pts = avail.width().min(avail.height()).max(64.0);
                 let ppp = ctx.pixels_per_point();
-                let px = (side_pts * ppp).round().max(64.0) as u32;
+                let mut px = (side_pts * ppp).round().max(64.0) as u32;
+                if self.style.max_px > 0 {
+                    px = px.min(self.style.max_px).max(64);
+                }
+
+                // Pointer magnet: primary button/touch held over the dial.
+                // Dial radius in points matches Map's 0.94 factor.
+                let dial_r_pts = side_pts / 2.0 * 0.94;
+                self.pointer = ctx.input(|i| {
+                    if !i.pointer.primary_down() {
+                        return None;
+                    }
+                    let pos = i.pointer.interact_pos()?;
+                    if !avail.contains(pos) {
+                        return None;
+                    }
+                    let center = avail.center();
+                    let world = Vec2::new(
+                        ((pos.x - center.x) / dial_r_pts) as f64,
+                        ((pos.y - center.y) / dial_r_pts) as f64,
+                    );
+                    (world.len() <= 1.05).then_some((world, pos))
+                });
 
                 self.fb.resize(px, px);
                 let now = self.clock.now();
                 self.step_sim_to(now);
-                let sources = FieldSources::at_time(&self.layouts, now);
+                let sources = self.sources_at(now);
                 draw_clock(
                     &mut self.fb,
                     now,
@@ -414,6 +473,20 @@ impl eframe::App for ClockApp {
                     egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                     egui::Color32::WHITE,
                 );
+
+                // Feedback ring around the pointer magnet.
+                if let Some((_, screen)) = self.pointer {
+                    if self.sim.params.pointer_strength > 0.0 {
+                        ui.painter().circle_stroke(
+                            screen,
+                            (self.sim.params.pointer_radius * dial_r_pts as f64) as f32,
+                            egui::Stroke::new(
+                                1.5_f32,
+                                egui::Color32::from_rgba_unmultiplied(128, 128, 128, 140),
+                            ),
+                        );
+                    }
+                }
             });
 
         // Idle egui repaints only on input; without this the clock freezes.

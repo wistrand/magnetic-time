@@ -48,6 +48,12 @@ pub struct SimParams {
     /// Models short-range momentum exchange through the liquid; clusters move
     /// cohesively and moving magnets entrain nearby particles. 0 = off.
     pub drag_coupling: f64,
+    /// Interactive pointer magnet (touch/mouse drag) charge; 0 disables.
+    /// Charges fall off as 1/r^2 vs dipole 1/r^3, so useful values are much
+    /// larger than hand strengths.
+    pub pointer_strength: f64,
+    /// Pointer magnet disc radius (near-field softness), dial units.
+    pub pointer_radius: f64,
     pub seed: u64,
 }
 
@@ -78,6 +84,8 @@ impl Default for SimParams {
             chain_range: 0.0228,
             chain_compress: 0.0,
             drag_coupling: 0.0,
+            pointer_strength: 30.0,
+            pointer_radius: 0.05,
             seed: 1,
         }
     }
