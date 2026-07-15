@@ -1,5 +1,8 @@
 # Research: bands perpendicular to chains
 
+> Public writeup of these results: `docs/banding.html` (keep it in sync if
+> results here change).
+
 Why particles form bands running perpendicular to the chain direction, as
 observed in dumps and interactively (2026-07). Mechanism analysis verified
 against this codebase's pair force; literature references collected but not

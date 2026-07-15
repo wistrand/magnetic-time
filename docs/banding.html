@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The bands are objects, not waves</title>
+<meta name="description" content="Six experiments on the stripe patterns in magnetic-time's particle simulation.">
+<style>
+  :root {
+    --bg: #10121a;
+    --panel: #181b26;
+    --text: #c9cede;
+    --dim: #8a91a8;
+    --accent: #7daaff;
+    --rule: #262b3a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 0 20px 80px; }
+  header { padding: 56px 0 8px; }
+  h1 { font-size: 1.9rem; color: #e8ebf5; font-weight: 600; line-height: 1.25; }
+  .byline { color: var(--dim); margin-top: 8px; font-size: 0.9rem; }
+  h2 {
+    font-size: 1.2rem;
+    color: #e8ebf5;
+    margin: 44px 0 12px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+  }
+  p { margin: 0 0 14px; }
+  figure { margin: 24px 0; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px) { .pair { grid-template-columns: 1fr; } }
+  img { width: 100%; height: auto; border-radius: 8px; display: block; }
+  figcaption { color: var(--dim); font-size: 0.88rem; margin-top: 8px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    margin: 20px 0;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th { color: var(--dim); font-weight: 600; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; }
+  code { background: var(--panel); padding: 2px 6px; border-radius: 4px; }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 14px;
+  }
+  pre code { background: none; padding: 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  footer {
+    color: var(--dim);
+    font-size: 0.9rem;
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>The bands are objects, not waves</h1>
+    <p class="byline">Six experiments on the stripe patterns in
+    <a href="./">magnetic-time</a>'s particle simulation · 2026-07</p>
+  </header>
+
+  <p>
+    The stripes the clock draws are not a rendering trick. Set the dipole pair
+    force to zero and they never form; everything else about the run stays
+    the same.
+  </p>
+
+  <figure>
+    <div class="pair">
+      <img src="img/band-crystal.png" alt="Concentric rings of particle dashes around two magnet poles" width="600" height="600">
+      <img src="img/band-gas.png" alt="The same field with pair forces off: smooth radial fur, no rings" width="600" height="600">
+    </div>
+    <figcaption>Same field, same particles, same 180 seconds. Left: pair force
+    on, rings around every pole. Right: pair force off, fur. The rings are the
+    pair force's work.</figcaption>
+  </figure>
+
+  <p>
+    The bands look paradoxical at first: the attraction pulls beads into
+    strings along the field lines, so whatever structure it builds should be
+    stringy too. The way out is that two magnets attract or repel depending
+    on how they sit. Each bead here is a tiny bar magnet pointing along the
+    field. Put two of them nose to tail and they pull together; that is what
+    builds the chains. Lay them side by side instead and their like poles
+    line up, so they push apart; neighboring chains keep their distance.
+    But slide one chain along by half a bead, and each of its beads now sits
+    closest to a neighbor's opposite pole. The repulsion turns into
+    attraction and the two chains click together, staggered like rows of
+    bricks. More chains keep clicking on, and the result is a wall. Seen
+    from above, that wall is a band, running across the chains that built
+    it. Real magnetic fluids do the same thing (the literature calls it
+    zippering); it happens here because the sim computes the actual
+    magnet-to-magnet force instead of faking the look.
+  </p>
+
+  <h2>Eight questions, run against the sim</h2>
+
+  <p>
+    Patterns that assemble and die invite the questions people ask of
+    cellular automata: is there a birth threshold, and what happens when two
+    structures collide? Eight such questions were written down with
+    predictions, then run against the simulation. Headless runs are
+    deterministic, so every result below reproduces from one command. Three
+    of the predictions turned out to be wrong.
+  </p>
+
+  <table>
+    <tr><th>question</th><th>predicted</th><th>measured</th></tr>
+    <tr><td>where does banding happen</td><td>melting line vs noise</td>
+        <td>melting confirmed; onset at any nonzero attraction</td></tr>
+    <tr><td>birth/death threshold</td><td>hysteretic</td>
+        <td>no hysteresis; fully reversible</td></tr>
+    <tr><td>do ordering fronts move</td><td>yes, then stall</td>
+        <td>no front exists; everything condenses at once</td></tr>
+    <tr><td>band collisions</td><td>merge or stack</td>
+        <td>stack first, then merge into one wall; nothing annihilates</td></tr>
+    <tr><td>closed loops</td><td>chains closing along field lines</td>
+        <td>chain loops are impossible; band loops exist instead</td></tr>
+    <tr><td>memory of erased patterns</td><td>some</td>
+        <td>readable 12+ minutes after erasure; decay closer to hours</td></tr>
+    <tr><td>coarsening exponent</td><td>power law</td>
+        <td>none. ring count plateaus, then cliffs</td></tr>
+    <tr><td>template reproduction</td><td>open</td>
+        <td>not run yet (needs a finger, see below)</td></tr>
+  </table>
+
+  <p>
+    The misses share one explanation, and it is the interesting result. Bands
+    behave like discrete objects. The bond view shows why: chain bonds run
+    along each band, tying it into one connected body, and there are no bonds
+    across the gap to the next band. So bands collide the way objects do.
+    They stack, then merge when drift brings them into contact; they never
+    pass through each other, because they are made of conserved particles,
+    not of state.
+    And they die the way objects do: the ring count around a pole sits at
+    three for four minutes, then the pole eats them one after another. A
+    power law needs a crowd of structures trading size. Three rings are not
+    a crowd.
+  </p>
+
+  <figure>
+    <div class="pair">
+      <img src="img/band-collide60.png" alt="Several parallel particle bands stacked in the corridor between two poles" width="440" height="480">
+      <img src="img/band-collide360.png" alt="The same corridor later: one thick consolidated band wall" width="440" height="480">
+    </div>
+    <figcaption>Collision between two ring systems. At 60 seconds, stacked
+    parallel bands. At 360 seconds, one thick wall, parked where the two
+    poles' pulls cancel.</figcaption>
+  </figure>
+
+  <p>
+    The loops question produced the most instructive miss. Chains cannot
+    close into loops here: the in-plane field lines run pole to pole, so a
+    chain following one always ends on a magnet. The transverse bands close
+    instead. Around an isolated pole a band has nowhere to end, and the bond
+    view confirms an unbroken ring of laterally bonded particles.
+  </p>
+
+  <figure>
+    <img src="img/band-loop.png" alt="Closeup of a complete unbroken particle ring around a bright magnet pole" width="500" height="500">
+    <figcaption>A closed band loop around one pole of a bar magnet. The
+    spiky texture is the individual particle strokes; the ring itself is one
+    bonded object.</figcaption>
+  </figure>
+
+  <p>
+    The memory result is the most surprising. Form bands for three minutes,
+    switch the pair force off, and the sharp structure dissolves in about
+    two. The density ghost it leaves behind, depleted halos where the bands
+    swept material up, stays measurable for at least twelve minutes and
+    extrapolates to hours. Erasure is Brownian diffusion across the ghost's
+    length scale, which makes the noise parameter the forgetting rate: the
+    dish acts as a slow recording medium that fades with temperature.
+  </p>
+
+  <h2>Watch it yourself</h2>
+
+  <p>
+    The experiment configuration, live (bars fixed in place, second hand
+    magnetically dead):
+  </p>
+
+  <pre><code>cargo run --release -- --time 09:00:00 --particles 12000 \
+    --magnets tip --shapes rect:1x0.03 --strengths 0.3,0.15,0 \
+    --mobility 2e-8 --max-speed 0.05 --noise 0.008 --chain-strength 0.06</code></pre>
+
+  <p>
+    Watch the left pole: rings condense in the first half minute, hold for
+    four, then get eaten. Drag the chain strength slider to zero to run the
+    erasure experiment; drag the noise slider up to melt the rings. The
+    quantitative versions, with the analysis scripts and their calibration
+    caveats, are in the repo under
+    <code>agent_docs/research-chain-banding.md</code>.
+  </p>
+
+  <p>
+    One experiment is still open: template reproduction. Pile a ridge of
+    particles with the touch magnet while the pair force is off, switch it
+    on, and see whether the ridge zippers into a band that recruits a
+    neighbor row from the gas. That would be the closest thing this system
+    has to reproduction. Nobody has run it yet.
+  </p>
+
+  <footer>
+    <a href="./">magnetic-time</a> · <a href="app/">live clock</a> ·
+    <a href="app/variants.html">variants</a>
+  </footer>
+</main>
+</body>
+</html>
