@@ -37,13 +37,23 @@ Consequences:
 
 CORRECTION 2026-07-15 (owner challenge): an earlier version of point 4
 claimed the bands are "transverse rows of a 2D zippered lattice". That is
-unsupported at our band thickness (2-4 rows) and confused the picture;
-zippering by itself builds field-parallel structure, and the perpendicular
-elongation comes from the short-chain + unbounded-lateral-stacking geometry
-above. Why chains stay short is unexplained and is another face of the
-open wavelength question (finding 9). Note also that the literature support
-for field-perpendicular bands comes from UNSTEADY-field studies; treat that
-analogy as weak for our static-pole configuration.
+unsupported and confused the picture; zippering by itself builds
+field-parallel structure, and the perpendicular elongation comes from the
+short-chain + unbounded-lateral-stacking geometry above. Note also that
+the literature support for field-perpendicular bands comes from
+UNSTEADY-field studies; treat that analogy as weak for our static-pole
+configuration.
+
+MEASURED 2026-07-15 (dot-rendered dumps, `--stroke-len 0`, 3 seeds, 448
+clumps): median chainlet radial length 8.5 px vs median band FWHM 9.0 px.
+Bands are exactly ONE chainlet thick, and a chainlet is ~2 beads (dot ~5
+px, bead spacing 4.5 px). Tangential extents are heavy-tailed (median 7.6,
+mean 26.6 px): lateral zipper arcs, confirming the stacking picture at the
+connected-component level. Two implications: the thick "walls" in normal
+rendering are mostly stroke inflation (rendered strokes ~18 px vs 8.5 px
+physical; measure structure with --stroke-len 0), and the open
+wavelength/thickness question reduces to "what limits chainlets to ~2
+beads" (finding 9).
 
 Stroke rendering amplifies the read: a row of aligned strokes is visually
 strong.
