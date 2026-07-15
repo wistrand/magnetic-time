@@ -98,4 +98,6 @@ An egui side panel (vertical scroll for small windows) with sliders for every
 tunable, the time-speed multiplier, magnet layout/shape/strength combos per
 hand, palette and background pickers, debug view toggles, particle count
 (live), reset, and the dump button. Native shows it by default; the web
-component hides it unless the `dev-panel` attribute is set.
+component hides it unless the `dev-panel` attribute is set. Tapping the
+12 o'clock tick toggles it anywhere (native and web); the pointer magnet is
+suppressed inside that hotspot so the tap does not stir the particles.

@@ -456,6 +456,28 @@ impl eframe::App for ClockApp {
                 // Pointer magnet: primary button/touch held over the dial.
                 // Dial radius in points matches Map's 0.94 factor.
                 let dial_r_pts = side_pts / 2.0 * 0.94;
+                let center = avail.center();
+                let to_world = |pos: egui::Pos2| {
+                    Vec2::new(
+                        ((pos.x - center.x) / dial_r_pts) as f64,
+                        ((pos.y - center.y) / dial_r_pts) as f64,
+                    )
+                };
+                // Hotspot around the 12 o'clock tick: tapping it toggles the
+                // dev panel (the only way in for the panel-less web
+                // component), and the pointer magnet is suppressed there so
+                // the tap does not stir the particles.
+                let in_hotspot =
+                    |w: Vec2| (w - Vec2::new(0.0, -0.9)).len() < 0.15;
+
+                if ctx.input(|i| i.pointer.primary_clicked()) {
+                    if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
+                        if avail.contains(pos) && in_hotspot(to_world(pos)) {
+                            self.show_panel = !self.show_panel;
+                        }
+                    }
+                }
+
                 self.pointer = ctx.input(|i| {
                     if !i.pointer.primary_down() {
                         return None;
@@ -464,12 +486,8 @@ impl eframe::App for ClockApp {
                     if !avail.contains(pos) {
                         return None;
                     }
-                    let center = avail.center();
-                    let world = Vec2::new(
-                        ((pos.x - center.x) / dial_r_pts) as f64,
-                        ((pos.y - center.y) / dial_r_pts) as f64,
-                    );
-                    (world.len() <= 1.05).then_some((world, pos))
+                    let world = to_world(pos);
+                    (world.len() <= 1.05 && !in_hotspot(world)).then_some((world, pos))
                 });
 
                 self.fb.resize(px, px);
