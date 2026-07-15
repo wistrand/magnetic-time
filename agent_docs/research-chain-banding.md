@@ -87,6 +87,22 @@ microscope. The missing instrument is an order parameter extracted from
 dumps (2D FFT: a zippered lattice gives a transverse Bragg-like peak, fur an
 isotropic ring); that is an analysis script, not a sim change.
 
+Most results can also be watched live. The interactive base command matching
+the experiment configuration (quasi-static bars, second hand magnetically
+dead, experiment seed):
+
+```bash
+cargo run --release -- --time 09:00:00 --particles 12000 \
+    --magnets tip --shapes rect:1x0.03 --strengths 0.3,0.15,0 \
+    --mobility 2e-8 --max-speed 0.05 --noise 0.008 --chain-strength 0.06
+```
+
+Per-experiment "Live:" notes below assume this command; "reset particles"
+replays from the uniform state, the speed slider compresses the timeline,
+and pointer touches perturb the physics (avoid them while observing).
+Interactive runs show the same physics but not a byte-exact replay (hands
+creep, step budget); the dumps under `docs/debug/` are the records.
+
 1. Zippering phase diagram. RUN 2026-07-15, results below. Sweep
    `chain_strength` x `noise` at fixed seed/time/count; classify each dump
    via the order parameter in `scripts/band_order.py` (needs numpy+PIL:
@@ -128,6 +144,10 @@ isotropic ring); that is an analysis script, not a sim change.
    annulus reaches the dial rim, which reads as a fake ring); lags below
    ~18 px are contaminated by stroke-length autocorrelation; the 60 px lag
    cap under-reads heavily coarsened states.
+
+   Live: run the base command, then walk the phase diagram with the "chain
+   strength" and "noise" sliders. Drop chain strength to 0 for the gas
+   state; raise noise past ~0.05 to melt the rings.
 2. Birth/death threshold = nucleation vs spinodal. RUN 2026-07-15. The
    prediction (hysteretic) was WRONG on the evidence so far. Protocol: the
    headless `--anneal-from F --anneal-for SECONDS` flags run two-phase
@@ -153,6 +173,11 @@ isotropic ring); that is an analysis script, not a sim change.
 
    Caveats: single seed per cell; 180 s may undersample slow dissolution at
    intermediate X; conclusions hold at this mobility/density/config only.
+
+   Live: run the base command, wait ~2 minutes for solid rings, then drag
+   "chain strength" to 0 and watch them dissolve; drag back up and they
+   re-form with no memory of the old lattice (no hysteresis), though the
+   depleted halos linger (see experiment 6).
 3. Front propagation. RUN 2026-07-15. The predicted ordering front DOES NOT
    EXIST in this system. Same-seed time series (exp-1 config,
    chain_strength 0.06, t = 30..360 s) analyzed with
@@ -179,6 +204,10 @@ isotropic ring); that is an analysis script, not a sim change.
      (a seeded ordered cluster inside a quiescent disordered phase, e.g.
      near the melting noise with a localized seed). Not reachable with
      current headless tooling; interactive pointer seeding could do it.
+
+   Live: run the base command and hit "reset particles": within the first
+   ~30 seconds fine rings condense everywhere at once. There is no front to
+   see, which is the point.
 4. Band collisions. RUN 2026-07-15, using the natural collision arena in
    the exp-1 config: the hour-tip and hub ring systems grow into each other
    in the corridor between the poles (crops from the exp-3 time series plus
@@ -200,6 +229,11 @@ isotropic ring); that is an analysis script, not a sim change.
      the field saddle, held by zero net pull plus internal cohesion). This
      is the same structure as the bright inter-pole walls visible in the
      exp-1 grid images.
+
+   Live: run the base command and watch the corridor between the hour-bar
+   tip (9 o'clock) and the hub: parallel bands stack there in the first
+   minute, then consolidate into one thick wall over ~5 minutes. Enable
+   "chain bonds" to see the bands as bonded objects.
 5. Organisms. Partially answered by experiment 4: bands themselves qualify
    as weak organisms (internally bonded, persistent, collide as objects),
    and the second-hand comet/wake system is the glider + glider gun.
@@ -212,6 +246,9 @@ isotropic ring); that is an analysis script, not a sim change.
      (e.g. the "owl eye" rings at the overhung bar ends), which are closed
      cycles of lateral bonds by continuity. The spiral curls are open
      spiral bands, not loops. So: no chain loops, yes band loops.
+     Live: `cargo run --release` (the rings preset itself), enable "chain
+     bonds", and look for the closed annuli at the bar ends after ~10
+     minutes (or crank the speed slider).
    - Gliders: the second-hand comet already qualifies (shape persists while
      constituent particles turn over), and the second hand is a glider gun
      emitting one wake band per lap.
@@ -247,6 +284,11 @@ isotropic ring); that is an analysis script, not a sim change.
    least), the depleted halos outlive the band order by orders of
    magnitude, and the noise slider is the forgetting-rate knob (memory time
    ~ 1/noise^2).
+
+   Live: run the base command, wait ~3 minutes for rings, drag "chain
+   strength" to 0. The rings dissolve within ~2 minutes, but the dark
+   depleted halos around the poles persist far longer; raise "noise" to
+   watch them fade faster.
 7. Coarsening exponents. RUN 2026-07-15: log-spaced times 30..765 s x 3
    seeds, exp-1 config at chain_strength 0.06, ring statistics from
    `scripts/front_track.py --peaks` around the hour pole.
@@ -264,9 +306,19 @@ isotropic ring); that is an analysis script, not a sim change.
    (more particles, bigger dish, or a smaller chain_spacing so more rings
    fit), which exceeds the current interactive count budget but is
    feasible headless.
+
+   Live: run the base command and watch the hour-bar tip: ~3 rings at
+   fixed spacing for about four minutes (the plateau), then the pole eats
+   them in quick succession (the cliff), leaving one wall. "reset
+   particles" replays it.
+
 8. Template reproduction. Seed one band next to uniform gas (pointer);
    does it accrete an adjacent row (autocatalytic lateral growth)? This is
-   the system's closest analogue to reproduction.
+   the system's closest analogue to reproduction. Live protocol (this one
+   is interactive-only): run the base command with "chain strength" at 0,
+   drag the pointer slowly along an arc to pile particles into a ridge,
+   raise chain strength to ~0.06 so the ridge zippers into a band, then
+   watch whether it accretes neighbor rows from the surrounding gas.
 
 ## References (collected 2026-07, from abstracts/snippets; automated
 ## full-text fetch was blocked, so figure-level claims are unverified)
