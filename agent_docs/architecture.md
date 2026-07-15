@@ -13,7 +13,7 @@ file after all phases landed; design rationale lives in
 | `src/main.rs`  | Native CLI (flags, headless mode, --grad-check) and both entry points (native, wasm)   |
 | `src/clock.rs` | The single time source: display seconds since midnight, speed multiplier, HH:MM:SS I/O |
 | `src/hands.rs` | Hand lengths and angles; defines clock-face units (center origin, dial radius 1, y down) |
-| `src/field.rs` | The `Face` (rotating `HandMagnets` or the `SegClock` seven-segment readout), magnet layouts (`LayoutSpec`), field elements, analytic B and grad(|B|^2), string parsers shared by CLI and web attributes |
+| `src/field.rs` | Faces: `FaceConfigs` (the Copy config every carrier holds) builds a `Face` (rotating `HandMagnets` or the `SegClock` seven-segment readout); magnet layouts (`LayoutSpec`), field elements, analytic B and grad(|B|^2), string parsers shared by CLI and web attributes |
 | `src/sim.rs`   | `SimParams` tunables, overdamped particle stepper, spatial hash, chains, drag coupling  |
 | `src/render.rs`| Software rasterizer, `Style`/`Palette`/`Theme`, debug overlays, PNG output              |
 | `src/app.rs`   | eframe app: pending-config channel, pointer magnet, dev panel, fixed-dt catch-up loop   |

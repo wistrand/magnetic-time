@@ -222,6 +222,15 @@ what implementation teaches; correct entries that turn out wrong.
   face and share element expansion via `expand`. Verified behavior-preserving
   for hands by byte-identical headless dump against the pre-refactor baseline;
   keep that check when touching `expand` or `at_time`.
+- Adding a new face: put its config in `FaceConfigs` (field.rs), add a
+  `FaceKind` variant and a `FaceConfigs::build` arm, a `Face` variant, and
+  the `at_time` + `draw_clock` match arms (the compiler lists both). The
+  carrying structs (`Options`, `AppConfig`, `ClockApp`) hold one
+  `FaceConfigs` and need no new fields; that grouping is why. Wiring the new
+  face's knobs is still per-surface (CLI arm, web setter, JS attribute, dev
+  slider). draw_clock's seg branch already draws any marker-emitting face
+  from `sources.markers`, so a new one gets its overlay nearly free. Confirm
+  both faces stay byte-identical after the change.
 
 ## Decision history
 

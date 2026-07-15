@@ -432,21 +432,48 @@ pub enum Face {
     Seg(SegClock),
 }
 
-/// Copy descriptor the CLI, dev panel, and web attributes edit; built into a
-/// [Face] (which owns non-Copy [HandMagnets]) on change.
+/// Which face is active. The Copy selector the CLI, dev panel, and web
+/// attributes edit; paired with the built [Face] (which owns non-Copy
+/// [HandMagnets]) via [FaceConfigs::build].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FaceKind {
     Hands,
     Seg,
 }
 
-/// Build the live [Face] from the current hand specs and seg config, chosen
-/// by `kind`. `specs` is ignored in Seg mode, `seg` in Hands mode; both are
-/// kept so switching modes preserves each one's settings.
-pub fn build_face(kind: FaceKind, specs: &[LayoutSpec; 3], seg: SegClock) -> Face {
-    match kind {
-        FaceKind::Hands => Face::Hands(build_layouts(specs)),
-        FaceKind::Seg => Face::Seg(seg),
+/// Every face's configuration in one Copy struct, plus which one is active.
+/// This is the single descriptor the CLI, dev panel, and web attributes edit
+/// and pass around; `Options`, `AppConfig`, and `ClockApp` each carry one
+/// instead of scattering per-face fields. All configs are kept regardless of
+/// the active `kind` so switching faces preserves each one's settings; adding
+/// a face means adding a field here and a [Self::build] arm, not touching the
+/// carrying structs.
+#[derive(Clone, Copy)]
+pub struct FaceConfigs {
+    pub kind: FaceKind,
+    /// Rotating-hands layout (hour, minute, second).
+    pub hands: [LayoutSpec; 3],
+    /// Seven-segment digital readout.
+    pub seg: SegClock,
+}
+
+impl Default for FaceConfigs {
+    fn default() -> Self {
+        Self {
+            kind: FaceKind::Hands,
+            hands: default_specs(),
+            seg: SegClock::default(),
+        }
+    }
+}
+
+impl FaceConfigs {
+    /// Build the live [Face] for the active `kind`.
+    pub fn build(&self) -> Face {
+        match self.kind {
+            FaceKind::Hands => Face::Hands(build_layouts(&self.hands)),
+            FaceKind::Seg => Face::Seg(self.seg),
+        }
     }
 }
 

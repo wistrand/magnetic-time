@@ -42,12 +42,9 @@ struct Options {
     views: DebugViews,
     style: render::Style,
     sim: sim::SimParams,
-    magnets: [field::LayoutSpec; 3],
-    /// Which face drives the field: rotating hands (default) or a digital
-    /// seven-segment readout. `magnets` still holds the hand layout so a
-    /// later switch back to hands keeps it.
-    face_kind: field::FaceKind,
-    seg: field::SegClock,
+    /// The active face and every face's configuration (hand layout, seg
+    /// readout). One struct so faces stay self-contained; see field.rs.
+    face: field::FaceConfigs,
     /// Verify the analytic gradient against central differences and exit.
     grad_check: bool,
     /// Headless annealing: run the first `anneal_for` sim-seconds with
@@ -71,9 +68,7 @@ impl Default for Options {
             views: DebugViews::default(),
             style: render::Style::default(),
             sim: sim::SimParams::default(),
-            magnets: field::default_specs(),
-            face_kind: field::FaceKind::Hands,
-            seg: field::SegClock::default(),
+            face: field::FaceConfigs::default(),
             grad_check: false,
             anneal_from: 0.0,
             anneal_for: 0.0,
@@ -253,18 +248,20 @@ fn parse_args() -> Result<Options, String> {
                     .parse()
                     .map_err(|e| format!("--pointer-visual: {e}"))?
             }
-            "--magnets" => opts.magnets = field::parse_magnets(&value("--magnets", &mut args)?)?,
+            "--magnets" => {
+                opts.face.hands = field::parse_magnets(&value("--magnets", &mut args)?)?
+            }
             "--face" => {
                 let v = value("--face", &mut args)?;
                 match v.as_str() {
-                    "hands" => opts.face_kind = field::FaceKind::Hands,
+                    "hands" => opts.face.kind = field::FaceKind::Hands,
                     "seg" => {
-                        opts.face_kind = field::FaceKind::Seg;
-                        opts.seg.with_seconds = false;
+                        opts.face.kind = field::FaceKind::Seg;
+                        opts.face.seg.with_seconds = false;
                     }
                     "seg-hms" => {
-                        opts.face_kind = field::FaceKind::Seg;
-                        opts.seg.with_seconds = true;
+                        opts.face.kind = field::FaceKind::Seg;
+                        opts.face.seg.with_seconds = true;
                     }
                     other => {
                         return Err(format!("--face: unknown '{other}' (hands, seg, seg-hms)"))
@@ -272,7 +269,7 @@ fn parse_args() -> Result<Options, String> {
                 }
             }
             "--seg-strength" => {
-                opts.seg.strength = value("--seg-strength", &mut args)?
+                opts.face.seg.strength = value("--seg-strength", &mut args)?
                     .parse()
                     .map_err(|e| format!("--seg-strength: {e}"))?
             }
@@ -312,12 +309,12 @@ fn parse_args() -> Result<Options, String> {
         }
     }
     if let Some(s) = strengths {
-        for (spec, strength) in opts.magnets.iter_mut().zip(s) {
+        for (spec, strength) in opts.face.hands.iter_mut().zip(s) {
             spec.strength = strength;
         }
     }
     if let Some(s) = shapes {
-        for (spec, shape) in opts.magnets.iter_mut().zip(s) {
+        for (spec, shape) in opts.face.hands.iter_mut().zip(s) {
             spec.shape = shape;
         }
     }
@@ -352,7 +349,7 @@ fn parse_args() -> Result<Options, String> {
 /// expected (the numeric stencil straddles the kink; the analytic value is
 /// the correct one-sided derivative there).
 fn run_grad_check(opts: &Options) {
-    let face = field::build_face(opts.face_kind, &opts.magnets, opts.seg);
+    let face = opts.face.build();
     let t = opts.time.unwrap_or(10.0 * 3600.0 + 8.0 * 60.0 + 30.0);
     let sources = field::FieldSources::at_time(&face, t, opts.sim.field_clamp);
     let mut rng = sim::Rng::new(42);
@@ -384,7 +381,7 @@ fn run_grad_check(opts: &Options) {
 #[cfg(not(target_arch = "wasm32"))]
 fn run_headless(opts: &Options) -> Result<(), String> {
     let start = opts.time.unwrap_or_else(|| ClockSource::wall(1.0).now());
-    let face = field::build_face(opts.face_kind, &opts.magnets, opts.seg);
+    let face = opts.face.build();
     let mut particle_sim = sim::Sim::new(opts.sim);
     let t = if opts.anneal_for > 0.0 {
         // Two-phase run for hysteresis experiments: anneal at one chain
@@ -470,9 +467,7 @@ fn main() -> ExitCode {
                 opts.views,
                 opts.style,
                 opts.sim,
-                opts.magnets,
-                opts.face_kind,
-                opts.seg,
+                opts.face,
                 true,
                 None,
             )))

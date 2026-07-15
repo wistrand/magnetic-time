@@ -19,9 +19,7 @@ use crate::sim::SimParams;
 /// single-threaded browser sim.
 fn web_defaults() -> AppConfig {
     AppConfig {
-        specs: field::default_specs(),
-        face_kind: field::FaceKind::Hands,
-        seg: field::SegClock::default(),
+        face: field::FaceConfigs::default(),
         style: Style::default(),
         speed: 1.0,
         sim: SimParams {
@@ -73,9 +71,7 @@ impl WebHandle {
                         DebugViews::default(),
                         cfg.style,
                         cfg.sim,
-                        cfg.specs,
-                        cfg.face_kind,
-                        cfg.seg,
+                        cfg.face,
                         cfg.show_panel,
                         Some(pending),
                     )))
@@ -97,14 +93,14 @@ impl WebHandle {
     pub fn set_face(&self, v: &str) -> Result<(), JsValue> {
         let mut cfg = self.config.borrow_mut();
         match v {
-            "hands" => cfg.face_kind = field::FaceKind::Hands,
+            "hands" => cfg.face.kind = field::FaceKind::Hands,
             "seg" => {
-                cfg.face_kind = field::FaceKind::Seg;
-                cfg.seg.with_seconds = false;
+                cfg.face.kind = field::FaceKind::Seg;
+                cfg.face.seg.with_seconds = false;
             }
             "seg-hms" => {
-                cfg.face_kind = field::FaceKind::Seg;
-                cfg.seg.with_seconds = true;
+                cfg.face.kind = field::FaceKind::Seg;
+                cfg.face.seg.with_seconds = true;
             }
             other => return Err(js_err(format!("face: unknown '{other}'"))),
         }
@@ -115,14 +111,14 @@ impl WebHandle {
 
     /// Seven-segment per-segment magnet strength.
     pub fn set_seg_strength(&self, v: f64) {
-        self.config.borrow_mut().seg.strength = v.max(0.0);
+        self.config.borrow_mut().face.seg.strength = v.max(0.0);
         self.push();
     }
 
     /// Layout kinds per hand ("tip", "strip:N", "alt:N"). Resets strengths
     /// and shapes; the component re-applies those attributes afterwards.
     pub fn set_magnets(&self, v: &str) -> Result<(), JsValue> {
-        self.config.borrow_mut().specs = field::parse_magnets(v).map_err(js_err)?;
+        self.config.borrow_mut().face.hands = field::parse_magnets(v).map_err(js_err)?;
         self.push();
         Ok(())
     }
@@ -130,7 +126,7 @@ impl WebHandle {
     /// Per-hand strengths ("0.6" or "0.1,0.05,0.6").
     pub fn set_strengths(&self, v: &str) -> Result<(), JsValue> {
         let s = field::parse_strengths(v).map_err(js_err)?;
-        for (spec, strength) in self.config.borrow_mut().specs.iter_mut().zip(s) {
+        for (spec, strength) in self.config.borrow_mut().face.hands.iter_mut().zip(s) {
             spec.strength = strength;
         }
         self.push();
@@ -140,7 +136,7 @@ impl WebHandle {
     /// Per-hand shapes ("point", "disc:R", "rect:FxW").
     pub fn set_shapes(&self, v: &str) -> Result<(), JsValue> {
         let s = field::parse_shapes(v).map_err(js_err)?;
-        for (spec, shape) in self.config.borrow_mut().specs.iter_mut().zip(s) {
+        for (spec, shape) in self.config.borrow_mut().face.hands.iter_mut().zip(s) {
             spec.shape = shape;
         }
         self.push();

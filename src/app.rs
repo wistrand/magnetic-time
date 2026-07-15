@@ -4,9 +4,7 @@
 use eframe::egui;
 
 use crate::clock::{format_time, ClockSource};
-use crate::field::{
-    build_face, Face, FaceKind, FieldSources, LayoutSpec, MagnetKind, SegClock, SpecShape,
-};
+use crate::field::{Face, FaceConfigs, FaceKind, FieldSources, MagnetKind, SpecShape};
 use crate::render::{draw_clock, DebugViews, Framebuffer, Style};
 use crate::sim::{Sim, SimParams};
 use crate::vec2::Vec2;
@@ -20,9 +18,7 @@ const STEP_BUDGET: web_time::Duration = web_time::Duration::from_millis(12);
 /// component (attribute changes land here); native runs never push one.
 #[derive(Clone, Copy)]
 pub struct AppConfig {
-    pub specs: [LayoutSpec; 3],
-    pub face_kind: FaceKind,
-    pub seg: SegClock,
+    pub face: FaceConfigs,
     pub style: Style,
     pub speed: f64,
     pub sim: SimParams,
@@ -35,9 +31,9 @@ pub type PendingConfig = std::rc::Rc<std::cell::RefCell<Option<AppConfig>>>;
 pub struct ClockApp {
     clock: ClockSource,
     speed: f64,
-    specs: [LayoutSpec; 3],
-    face_kind: FaceKind,
-    seg: SegClock,
+    /// Every face's config plus the active selector; the panel edits this.
+    face_cfg: FaceConfigs,
+    /// The live face built from `face_cfg`, rebuilt on change.
     face: Face,
     views: DebugViews,
     style: Style,
@@ -62,9 +58,7 @@ impl ClockApp {
         views: DebugViews,
         style: Style,
         params: SimParams,
-        specs: [LayoutSpec; 3],
-        face_kind: FaceKind,
-        seg: SegClock,
+        face_cfg: FaceConfigs,
         show_panel: bool,
         pending: Option<PendingConfig>,
     ) -> Self {
@@ -73,10 +67,8 @@ impl ClockApp {
         Self {
             clock,
             speed,
-            specs,
-            face_kind,
-            seg,
-            face: build_face(face_kind, &specs, seg),
+            face_cfg,
+            face: face_cfg.build(),
             views,
             style,
             show_panel,
@@ -93,15 +85,13 @@ impl ClockApp {
     /// Rebuild the live face after its inputs (specs, mode, seg config)
     /// change. Cheap: called on edit, not per frame.
     fn rebuild_face(&mut self) {
-        self.face = build_face(self.face_kind, &self.specs, self.seg);
+        self.face = self.face_cfg.build();
     }
 
     /// Apply an externally pushed configuration, preserving particle state
     /// (count changes go through Sim::set_count).
     fn apply_config(&mut self, cfg: AppConfig) {
-        self.specs = cfg.specs;
-        self.face_kind = cfg.face_kind;
-        self.seg = cfg.seg;
+        self.face_cfg = cfg.face;
         self.rebuild_face();
         self.style = cfg.style;
         self.show_panel = cfg.show_panel;
@@ -190,21 +180,21 @@ impl ClockApp {
                 ui.horizontal(|ui| {
                     ui.label("face");
                     for (kind, label) in [(FaceKind::Hands, "hands"), (FaceKind::Seg, "seg")] {
-                        let sel = self.face_kind == kind;
+                        let sel = self.face_cfg.kind == kind;
                         if ui.selectable_label(sel, label).clicked() && !sel {
-                            self.face_kind = kind;
+                            self.face_cfg.kind = kind;
                             face_changed = true;
                         }
                     }
                 });
-                if self.face_kind == FaceKind::Seg {
+                if self.face_cfg.kind == FaceKind::Seg {
                     ui.horizontal(|ui| {
-                        if ui.checkbox(&mut self.seg.with_seconds, "seconds").changed() {
+                        if ui.checkbox(&mut self.face_cfg.seg.with_seconds, "seconds").changed() {
                             face_changed = true;
                         }
                         if ui
                             .add(
-                                egui::DragValue::new(&mut self.seg.strength)
+                                egui::DragValue::new(&mut self.face_cfg.seg.strength)
                                     .range(0.0..=2.0)
                                     .speed(0.01)
                                     .prefix("s "),
@@ -215,7 +205,7 @@ impl ClockApp {
                         }
                     });
                 }
-                let hands_mode = self.face_kind == FaceKind::Hands;
+                let hands_mode = self.face_cfg.kind == FaceKind::Hands;
                 let mut specs_changed = false;
                 if hands_mode {
                     ui.label("magnets");
@@ -226,7 +216,7 @@ impl ClockApp {
                     }
                     ui.horizontal(|ui| {
                         ui.label(*name);
-                        let spec = &mut self.specs[i];
+                        let spec = &mut self.face_cfg.hands[i];
                         egui::ComboBox::from_id_salt(("magnets", i))
                             .selected_text(spec.label())
                             .show_ui(ui, |ui| {
@@ -266,7 +256,7 @@ impl ClockApp {
                         }
                     });
                     ui.horizontal(|ui| {
-                        let spec = &mut self.specs[i];
+                        let spec = &mut self.face_cfg.hands[i];
                         ui.add_space(12.0);
                         let shape_name = match spec.shape {
                             SpecShape::Point => "point",
