@@ -153,17 +153,57 @@ isotropic ring); that is an analysis script, not a sim change.
 
    Caveats: single seed per cell; 180 s may undersample slow dissolution at
    intermediate X; conclusions hold at this mobility/density/config only.
-3. Front propagation. In the quasi-static hour-hand region, track the
-   ordered-region boundary across a same-seed time series. Predicted: initial
-   speed set by mobility times pair force at `chain_range`, then stalls as
-   the local particle reservoir depletes (supply-limited, unlike CA fronts).
-4. Band collisions. Drive bands together (grad(|B|^2) compression of wake
-   bands, or the pointer). Conservation of matter restricts outcomes to:
-   merge (staggered registry), stack as adjacent lattice rows (aligned
-   registry), or independent evaporation. Annihilation and pass-through are
-   impossible (no momentum, conserved particles); observing either would
-   mean a bug.
-5. Organisms.
+3. Front propagation. RUN 2026-07-15. The predicted ordering front DOES NOT
+   EXIST in this system. Same-seed time series (exp-1 config,
+   chain_strength 0.06, t = 30..360 s) analyzed with
+   `scripts/front_track.py` (windowed band contrast vs radius, threshold
+   0.05 calibrated on the chain-strength-0 control at 0.016; valid radii
+   50..175 px around the hour pole).
+
+   Results:
+
+   - From a uniform quench, banding condenses everywhere at once: already
+     at the first sample (30 s) contrast exceeds the gas baseline at every
+     radius, with fine rings covering the whole dish. No traveling
+     order/disorder boundary ever exists to track. This independently
+     corroborates experiment 2: the transition is spinodal (no
+     metastability), and a front needs a metastable phase to invade.
+   - What propagates instead (via `--peaks` ring tracking): rings drift
+     slowly inward (~0.1-0.2 px/s) and the pole's cleared consumption zone
+     sweeps OUTWARD, eating rings; the innermost surviving ring moves
+     53 -> 87 -> 95 -> 127 px between 180 and 360 s (~0.4 px/s ~ 0.0009
+     dial-units/s). Ring count decays from 4+ to 1 over six minutes:
+     coarsening by consumption at the pole more than by pairwise merging
+     (feeds experiment 7).
+   - To observe a genuine ordering front, one would need metastability
+     (a seeded ordered cluster inside a quiescent disordered phase, e.g.
+     near the melting noise with a localized seed). Not reachable with
+     current headless tooling; interactive pointer seeding could do it.
+4. Band collisions. RUN 2026-07-15, using the natural collision arena in
+   the exp-1 config: the hour-tip and hub ring systems grow into each other
+   in the corridor between the poles (crops from the exp-3 time series plus
+   a `--view chains` dump).
+
+   Results:
+
+   - Outcome is stack, then consolidate. At 60 s the two systems meet as
+     4-5 parallel unbonded columns; by 180 s one dominant thick wall with
+     satellites; by 360 s a single wall. No annihilation or pass-through
+     (as conservation demands).
+   - Bands are cohesive bonded objects: the chains view shows bonds running
+     along each band (laterally-zippered rows), while adjacent stacked
+     bands share no bonds across the gap. Bands therefore collide as
+     objects, and merging happens when drift brings two within chain range,
+     after which they zip into one multi-row wall.
+   - The final wall parks on the corridor mid-line between the opposing
+     poles, i.e. where the two attractions balance (inferred: it sits at
+     the field saddle, held by zero net pull plus internal cohesion). This
+     is the same structure as the bright inter-pole walls visible in the
+     exp-1 grid images.
+5. Organisms. Partially answered by experiment 4: bands themselves qualify
+   as weak organisms (internally bonded, persistent, collide as objects),
+   and the second-hand comet/wake system is the glider + glider gun.
+   Remaining sub-questions:
    - Loops: chains closing along the field lines that loop pole-to-pole on a
      bar magnet; the spiral curls at overhung pole ends in the rings preset
      are candidates. Inspect with `--view chains`.
@@ -205,10 +245,12 @@ isotropic ring); that is an analysis script, not a sim change.
 7. Coarsening exponents. Does band count decay as a power law in time?
    Track the FFT peak across a dump sequence; compare against zippering
    literature scaling. Partial data from experiment 1's age series
-   (90/180/360 s): non-monotone period (condensation then coarsening) and
-   inner-ring consumption by the poles; a proper exponent needs a denser
-   time series and a wider autocorrelation window than
-   `scripts/band_order.py` currently uses.
+   (90/180/360 s: non-monotone period, condensation then coarsening) and
+   experiment 3's ring tracking (`scripts/front_track.py --peaks`: count
+   4+ -> 1 over six minutes, consumption at the pole dominating pairwise
+   merging). A proper exponent needs a denser time series, seed averaging,
+   and a wider autocorrelation window than `scripts/band_order.py`
+   currently uses.
 8. Template reproduction. Seed one band next to uniform gas (pointer);
    does it accrete an adjacent row (autocatalytic lateral growth)? This is
    the system's closest analogue to reproduction.

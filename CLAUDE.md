@@ -23,7 +23,7 @@ All plan phases are built and owner-tuned; the plan was promoted to
 | `src/`        | application code                                    |
 | `agent_docs/` | architecture, design decisions, gotchas (below)     |
 | `docs/`       | GitHub Pages site (index.html, img/), committed     |
-| `scripts/`    | owner-run helper scripts (web build)                |
+| `scripts/`    | web build script; experiment analysis (numpy+PIL)   |
 | `docs/app/`   | wasm build of the clock (pkg/ from build-web.sh)    |
 | `docs/debug/` | dumped debug bitmaps, disposable, gitignored        |
 

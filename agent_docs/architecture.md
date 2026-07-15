@@ -49,7 +49,11 @@ Dumps are deterministic (fixed seed/time/duration, order-independent passes,
 index-keyed noise streams), so before/after comparison is valid; byte-compare
 for refactors that must not change behavior, visual compare otherwise. Keep
 `cargo check --target wasm32-unknown-unknown` green. The invariants in
-[../CLAUDE.md](../CLAUDE.md) must hold after every change.
+[../CLAUDE.md](../CLAUDE.md) must hold after every change. Quantitative
+image analysis for the research experiments lives in `scripts/*.py`
+(numpy+PIL); see
+[research-chain-banding.md](research-chain-banding.md) for what each
+measures and its calibration caveats.
 
 ## Build-plan history
 
