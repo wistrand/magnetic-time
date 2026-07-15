@@ -6,9 +6,11 @@
 use crate::hands;
 use crate::vec2::Vec2;
 
-/// Evaluation distance clamp (dial-radius units). Fields diverge at their
-/// sources; anything closer than this is treated as being at this distance.
-/// Disc magnets clamp at their radius instead.
+/// DEFAULT near-field clamp radius (dial-radius units). Fields diverge at
+/// their sources; anything closer than the clamp is treated as being at the
+/// clamp distance. The live value is SimParams::field_clamp (this const is
+/// its default); the pointer magnet also uses this as its clamp floor.
+/// Disc magnets clamp at their own radius when larger.
 pub const MIN_DIST: f64 = 0.02;
 
 /// Step for the numeric gradient of |B|^2.
@@ -280,7 +282,9 @@ pub struct FieldSources {
 }
 
 impl FieldSources {
-    pub fn at_time(layouts: &[HandMagnets; 3], time_secs: f64) -> Self {
+    /// `min_dist` is the near-field clamp radius for point/rect elements
+    /// (SimParams::field_clamp); discs clamp at their own radius if larger.
+    pub fn at_time(layouts: &[HandMagnets; 3], time_secs: f64, min_dist: f64) -> Self {
         let angles = hands::angles(time_secs);
         let mut elements = Vec::new();
         let mut markers = Vec::new();
@@ -299,12 +303,12 @@ impl FieldSources {
                     MagnetShape::Point => elements.push(Element::Dipole {
                         pos,
                         moment,
-                        r_min: MIN_DIST,
+                        r_min: min_dist,
                     }),
                     MagnetShape::Disc { radius } => elements.push(Element::Dipole {
                         pos,
                         moment,
-                        r_min: radius.max(MIN_DIST),
+                        r_min: radius.max(min_dist),
                     }),
                     MagnetShape::Rect { half_len, half_wid } => {
                         // Two pole faces of distributed charge. Total charge
@@ -329,7 +333,7 @@ impl FieldSources {
                                 elements.push(Element::Charge {
                                     pos: center + perp * (t * half_wid * 0.8),
                                     q: q * face,
-                                    r_min: MIN_DIST,
+                                    r_min: min_dist,
                                 });
                             }
                         }

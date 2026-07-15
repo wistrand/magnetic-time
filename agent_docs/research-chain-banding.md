@@ -425,6 +425,61 @@ creep, step budget); the dumps under `docs/debug/` are the records.
      The dt effect (coarser -> smaller spacing) also needs re-examination
      with the pooled instrument before being trusted.
 
+   SYNTHESIS 2026-07-15 (analytical reasoning + pooled positions): the
+   surviving explanation is BOUNDARY-CONDITION MODES, the owner's
+   standing-wave idea transposed from a local balance to a bounded basin.
+   The chain of elimination:
+
+   1. Ring positions are anchored across seeds AND conditions (pooled
+      radii 57/92/115 px for both the noise and mobility arms), so
+      something static sets them.
+   2. Static field template excluded analytically: the exact grad(|B|^2)
+      profile along the measurement axis (computed from the field.rs
+      charge model) is smooth and monotone; no stagnation radii exist.
+   3. The only remaining static structure is the global flow geometry:
+      the basin around each pole, bounded by the watershed separatrices
+      to the other poles (where exp-4's walls park).
+   4. Configuration test: removing the minute bar (hour-pole local field
+      unchanged) shifts pooled radii to 54/76/126; halving the local pole
+      strength within a fixed configuration shifts them only ~4 px.
+      Positions track the global configuration, not local strength or
+      dynamics parameters.
+
+   Working picture: ring positions are modes of the fixed basin
+   (boundary-condition-set, hence every dynamics null and the non-uniform
+   gaps), while dynamics parameters set contrast, formation speed, and
+   lifetimes. Open: the mode-selection mechanism (what equation, why ~3
+   rings), a quantitative watershed-position calculation to predict radii,
+   and the dt re-check with the pooled instrument.
+
+   COUNTER-EVIDENCE 2026-07-15 (owner manual tests): single tip magnets
+   and other configurations all show the same characteristic wavelength.
+   This weakens the cavity picture: the pooled position shifts between
+   configurations (92 -> 76 px etc.) were never error-barred and the gap
+   SCALE was in the same 20..50 px band in every configuration measured
+   here too. If the wavelength is configuration-independent as well as
+   parameter-independent, it is an intrinsic scale, and exactly one length
+   constant is shared identically by every configuration and has never
+   been varied: MIN_DIST, the field clamp radius (0.02 u ~ 9.4 px).
+
+   CLAMP SWEEP 2026-07-15 (field_clamp exposed as SimParams field +
+   --field-clamp + slider; default byte-identical): clamp 0.01/0.02/0.04
+   gives pooled gaps ~30/35/40 px and per-seed 31.9/42.5/44.0. A 4x clamp
+   change moves spacing at most ~30% (exponent ~0.2, marginal), nowhere
+   near proportional, and the first pooled ring sits at 57 px at ALL three
+   clamps. MIN_DIST is not the seed.
+
+   FINAL STATUS: every constant, parameter, configuration, and
+   discretization in the simulation has now been tested. The scale
+   (first ring ~57 px ~ 0.12 u, gaps ~30-40 px) is genuinely emergent
+   from the collective condensation dynamics; no single knob sets it.
+   Remaining roads: the mechanism movie (track proto-ring consolidation
+   t=5..90 s at fine dt with pooled profiles) and theory (1D
+   transport-aggregation stability analysis of the exact model). The
+   weak residual trends (clamp ^0.2, mobility ^-0.17) might combine into
+   a compound scale, but establishing that needs the ~16-seed pooled
+   methodology per point.
+
    Also eliminated at converged dt: pole-face width (39.8 / 42.7 / 39.5
    across 4x), magnet shape (point dipole 35.7 vs bar 42, within scatter),
    and single-bar strength (non-monotone within scatter across 0.15..0.6

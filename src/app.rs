@@ -106,7 +106,8 @@ impl ClockApp {
     /// Field sources for a display time, including the pointer magnet while
     /// it is down.
     fn sources_at(&self, t: f64) -> FieldSources {
-        let mut sources = FieldSources::at_time(&self.layouts, t);
+        let mut sources =
+            FieldSources::at_time(&self.layouts, t, self.sim.params.field_clamp);
         if let Some((world, _)) = self.pointer {
             let p = &self.sim.params;
             if p.pointer_strength > 0.0 {
@@ -342,6 +343,11 @@ impl ClockApp {
                         egui::Slider::new(&mut p.dt, 0.004..=0.1)
                             .logarithmic(true)
                             .text("dt (s)"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.field_clamp, 0.005..=0.08)
+                            .logarithmic(true)
+                            .text("field clamp"),
                     );
                     ui.add(
                         egui::Slider::new(&mut p.drag_coupling, 0.0..=1.0)

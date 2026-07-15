@@ -66,6 +66,11 @@ pub struct SimParams {
     /// Max chain pair contributions per particle per step; in a dense clump
     /// the force saturates anyway and this bounds the cost.
     pub chain_max_neighbors: u32,
+    /// Near-field clamp radius for point/rect field elements, dial units
+    /// (passed to FieldSources::at_time; discs use their own radius if
+    /// larger). Exposed 2026-07-15 to test whether the band wavelength is
+    /// seeded by this scale.
+    pub field_clamp: f64,
     pub seed: u64,
 }
 
@@ -99,6 +104,7 @@ impl Default for SimParams {
             pointer_visual: 0.03,
             chain_speed_cap: 0.12,
             chain_max_neighbors: 48,
+            field_clamp: crate::field::MIN_DIST,
             seed: 1,
         }
     }
@@ -478,7 +484,7 @@ impl Sim {
         let steps = (seconds / self.params.dt).round() as u64;
         for k in 0..steps {
             let t = t0 + k as f64 * self.params.dt;
-            let sources = FieldSources::at_time(layouts, t);
+            let sources = FieldSources::at_time(layouts, t, self.params.field_clamp);
             self.step(&sources);
         }
         t0 + steps as f64 * self.params.dt

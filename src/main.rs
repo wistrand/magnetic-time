@@ -78,7 +78,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
-                     [--chain-neighbors N] [--dt F]
+                     [--chain-neighbors N] [--dt F] [--field-clamp F]
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
                      [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
@@ -190,6 +190,11 @@ fn parse_args() -> Result<Options, String> {
                     .parse()
                     .map_err(|e| format!("--repulsion-radius: {e}"))?
             }
+            "--field-clamp" => {
+                opts.sim.field_clamp = value("--field-clamp", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--field-clamp: {e}"))?
+            }
             "--dt" => {
                 opts.sim.dt = value("--dt", &mut args)?
                     .parse()
@@ -275,7 +280,7 @@ fn parse_args() -> Result<Options, String> {
 fn run_grad_check(opts: &Options) {
     let layouts = field::build_layouts(&opts.magnets);
     let t = opts.time.unwrap_or(10.0 * 3600.0 + 8.0 * 60.0 + 30.0);
-    let sources = field::FieldSources::at_time(&layouts, t);
+    let sources = field::FieldSources::at_time(&layouts, t, opts.sim.field_clamp);
     let mut rng = sim::Rng::new(42);
     let (mut max_rel, mut sum, mut bad) = (0.0f64, 0.0f64, 0u32);
     const N: u32 = 20000;
@@ -318,7 +323,7 @@ fn run_headless(opts: &Options) -> Result<(), String> {
     } else {
         particle_sim.advance(&layouts, start, opts.sim_seconds)
     };
-    let sources = field::FieldSources::at_time(&layouts, t);
+    let sources = field::FieldSources::at_time(&layouts, t, opts.sim.field_clamp);
     let mut fb = render::Framebuffer::new(opts.size, opts.size);
     render::draw_clock(
         &mut fb,
