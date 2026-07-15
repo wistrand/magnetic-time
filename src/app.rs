@@ -179,7 +179,11 @@ impl ClockApp {
                 let mut face_changed = false;
                 ui.horizontal(|ui| {
                     ui.label("face");
-                    for (kind, label) in [(FaceKind::Hands, "hands"), (FaceKind::Seg, "seg")] {
+                    for (kind, label) in [
+                        (FaceKind::Hands, "hands"),
+                        (FaceKind::Seg, "seg"),
+                        (FaceKind::Tide, "tide"),
+                    ] {
                         let sel = self.face_cfg.kind == kind;
                         if ui.selectable_label(sel, label).clicked() && !sel {
                             self.face_cfg.kind = kind;
@@ -195,6 +199,21 @@ impl ClockApp {
                         if ui
                             .add(
                                 egui::DragValue::new(&mut self.face_cfg.seg.strength)
+                                    .range(0.0..=2.0)
+                                    .speed(0.01)
+                                    .prefix("s "),
+                            )
+                            .changed()
+                        {
+                            face_changed = true;
+                        }
+                    });
+                }
+                if self.face_cfg.kind == FaceKind::Tide {
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut self.face_cfg.tide.strength)
                                     .range(0.0..=2.0)
                                     .speed(0.01)
                                     .prefix("s "),

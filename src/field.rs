@@ -426,10 +426,94 @@ impl SegClock {
     }
 }
 
-/// Which face drives the field: rotating hands or a digital readout.
+/// Tide face: three concentric arcs of bar magnets, one per unit (inner
+/// hours, middle minutes, outer seconds), each drawn from 12 o'clock
+/// clockwise up to the current fraction of its unit. The arcs read like
+/// filling gauges; the moving leading tip of each arc plows a wake, so the
+/// fast outer tip trails a comet and the slow inner one barely stirs. The
+/// arcs are long chains, so they band along their length under the rings
+/// preset (the banding is the readout, not a nuisance). An alternative to
+/// [hands] and [SegClock].
+#[derive(Clone, Copy)]
+pub struct TideClock {
+    /// Per-segment bar moment magnitude.
+    pub strength: f64,
+    /// Segment bar half-width, dial units.
+    pub half_wid: f64,
+}
+
+impl Default for TideClock {
+    fn default() -> Self {
+        Self {
+            strength: 0.14,
+            half_wid: 0.02,
+        }
+    }
+}
+
+/// Arc radii in dial units, inner to outer: hours, minutes, seconds.
+const TIDE_RADII: [f64; 3] = [0.40, 0.62, 0.85];
+
+impl TideClock {
+    /// World-space magnets for a display time. Each arc is a run of collinear
+    /// alternating tangent bars (same fill trick as the seg segments) up to
+    /// its fraction, capped by a disc at the leading tip.
+    fn magnets_at(&self, time_secs: f64) -> Vec<(Vec2, Vec2, MagnetShape)> {
+        const TAU: f64 = std::f64::consts::TAU;
+        const START: f64 = -TAU / 4.0; // 12 o'clock
+        const D_ANG: f64 = 0.09; // target angular pitch between bars
+        const SHRINK: f64 = 0.85;
+
+        let t = time_secs.rem_euclid(24.0 * 3600.0);
+        let fracs = [
+            (t % (12.0 * 3600.0)) / (12.0 * 3600.0), // hours over 12 h
+            (t % 3600.0) / 3600.0,                   // minutes over 1 h
+            (t % 60.0) / 60.0,                       // seconds over 1 min
+        ];
+
+        let mut out = Vec::new();
+        for (r, frac) in TIDE_RADII.iter().zip(fracs) {
+            let r = *r;
+            let total = frac * TAU;
+            if total > 1e-4 {
+                let n = (total / D_ANG).round().max(1.0) as usize;
+                let step = total / n as f64;
+                let half_len = r * step / 2.0 * SHRINK;
+                for k in 0..n {
+                    let th = START + (k as f64 + 0.5) * step;
+                    let pos = Vec2::new(r * th.cos(), r * th.sin());
+                    let tang = Vec2::new(-th.sin(), th.cos());
+                    let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
+                    out.push((
+                        pos,
+                        tang * (sign * self.strength),
+                        MagnetShape::Rect {
+                            half_len,
+                            half_wid: self.half_wid,
+                        },
+                    ));
+                }
+            }
+            // Leading tip: the "now" head, brighter and a disc so its wake
+            // reads as a comet as the arc grows.
+            let th_end = START + total;
+            let pos = Vec2::new(r * th_end.cos(), r * th_end.sin());
+            out.push((
+                pos,
+                pos.normalized() * (self.strength * 1.5),
+                MagnetShape::Disc { radius: 0.045 },
+            ));
+        }
+        out
+    }
+}
+
+/// Which face drives the field: rotating hands, a digital readout, or the
+/// tide arcs.
 pub enum Face {
     Hands([HandMagnets; 3]),
     Seg(SegClock),
+    Tide(TideClock),
 }
 
 /// Which face is active. The Copy selector the CLI, dev panel, and web
@@ -439,6 +523,7 @@ pub enum Face {
 pub enum FaceKind {
     Hands,
     Seg,
+    Tide,
 }
 
 /// Every face's configuration in one Copy struct, plus which one is active.
@@ -455,6 +540,8 @@ pub struct FaceConfigs {
     pub hands: [LayoutSpec; 3],
     /// Seven-segment digital readout.
     pub seg: SegClock,
+    /// Concentric tide arcs.
+    pub tide: TideClock,
 }
 
 impl Default for FaceConfigs {
@@ -463,6 +550,7 @@ impl Default for FaceConfigs {
             kind: FaceKind::Hands,
             hands: default_specs(),
             seg: SegClock::default(),
+            tide: TideClock::default(),
         }
     }
 }
@@ -473,6 +561,7 @@ impl FaceConfigs {
         match self.kind {
             FaceKind::Hands => Face::Hands(build_layouts(&self.hands)),
             FaceKind::Seg => Face::Seg(self.seg),
+            FaceKind::Tide => Face::Tide(self.tide),
         }
     }
 }
@@ -566,6 +655,11 @@ impl FieldSources {
                 }
             }
             Face::Seg(cfg) => {
+                for (pos, moment, shape) in cfg.magnets_at(time_secs) {
+                    expand(pos, moment, shape, min_dist, &mut elements, &mut markers);
+                }
+            }
+            Face::Tide(cfg) => {
                 for (pos, moment, shape) in cfg.magnets_at(time_secs) {
                     expand(pos, moment, shape, min_dist, &mut elements, &mut markers);
                 }

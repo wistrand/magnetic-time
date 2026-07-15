@@ -102,6 +102,7 @@ impl WebHandle {
                 cfg.face.kind = field::FaceKind::Seg;
                 cfg.face.seg.with_seconds = true;
             }
+            "tide" => cfg.face.kind = field::FaceKind::Tide,
             other => return Err(js_err(format!("face: unknown '{other}'"))),
         }
         drop(cfg);
@@ -112,6 +113,12 @@ impl WebHandle {
     /// Seven-segment per-segment magnet strength.
     pub fn set_seg_strength(&self, v: f64) {
         self.config.borrow_mut().face.seg.strength = v.max(0.0);
+        self.push();
+    }
+
+    /// Tide per-arc magnet strength.
+    pub fn set_tide_strength(&self, v: f64) {
+        self.config.borrow_mut().face.tide.strength = v.max(0.0);
         self.push();
     }
 

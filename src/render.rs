@@ -500,7 +500,7 @@ pub fn draw_clock(
                 fb.disc(cx, cy, r * 0.028, theme.hand);
                 fb.disc(cx, cy, r * 0.014, theme.second);
             }
-            Face::Seg(_) => {
+            Face::Seg(_) | Face::Tide(_) => {
                 for mk in &sources.markers {
                     match mk.shape {
                         MagnetShape::Rect { half_len, half_wid } => {

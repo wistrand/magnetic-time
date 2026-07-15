@@ -98,9 +98,11 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--anneal-from F --anneal-for SECONDS]  headless: run the
                      first SECONDS at chain-strength F, then switch
                      [--grad-check]  verify analytic field gradient, then exit
-                     [--face hands|seg|seg-hms]  hands (default) or a digital
-                     seven-segment readout (seg = HH:MM, seg-hms = HH:MM:SS)
+                     [--face hands|seg|seg-hms|tide]  hands (default), a digital
+                     seven-segment readout (seg = HH:MM, seg-hms = HH:MM:SS),
+                     or the tide arcs (concentric filling gauges)
                      [--seg-strength F]  per-segment bar magnet strength
+                     [--tide-strength F]  per-arc bar magnet strength
                      [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
                      one value applies to all hands (hands face only)
                      [--strengths HOUR,MINUTE,SECOND]  per-magnet moment scale;
@@ -263,8 +265,11 @@ fn parse_args() -> Result<Options, String> {
                         opts.face.kind = field::FaceKind::Seg;
                         opts.face.seg.with_seconds = true;
                     }
+                    "tide" => opts.face.kind = field::FaceKind::Tide,
                     other => {
-                        return Err(format!("--face: unknown '{other}' (hands, seg, seg-hms)"))
+                        return Err(format!(
+                            "--face: unknown '{other}' (hands, seg, seg-hms, tide)"
+                        ))
                     }
                 }
             }
@@ -272,6 +277,11 @@ fn parse_args() -> Result<Options, String> {
                 opts.face.seg.strength = value("--seg-strength", &mut args)?
                     .parse()
                     .map_err(|e| format!("--seg-strength: {e}"))?
+            }
+            "--tide-strength" => {
+                opts.face.tide.strength = value("--tide-strength", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--tide-strength: {e}"))?
             }
             "--strengths" => {
                 strengths = Some(field::parse_strengths(&value("--strengths", &mut args)?)?)
