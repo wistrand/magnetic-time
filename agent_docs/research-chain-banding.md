@@ -499,6 +499,20 @@ creep, step budget); the dumps under `docs/debug/` are the records.
      baseline pooled data already shows the gradient (gaps 35 px inner,
      23 px outer) and had gone unremarked.
 
+   Kinematics of the aftermath (tear fast, creep slow, die fast): the
+   tearing is an event of the initial collapse; the rings that remain are,
+   by selection, the material parked where drift is slow (drift ~ 1/r^5,
+   so speed only exists near the pole, and in two-bar configs the opposing
+   hub poles cancel part of the pull at ring radii). Measured ring creep
+   is 0.1-0.2 px/s inward (exp 3), so crossing one band spacing (~35 px)
+   takes ~4 minutes, which matches the exp-7 plateau duration: the plateau
+   IS the transit time between ring positions. Ring death looks sudden
+   because infall is self-accelerating: a ring creeps until its inner edge
+   reaches the steep zone, then 1/r^5 consumes it in seconds (the exp-7
+   cliff). Raising strength and mobility multiplies the drift everywhere,
+   which is why the gap-stretching creep becomes watchable live (owner
+   observation).
+
    Final comparisons (2026-07-15, `scripts/model1d.py`, 10-20 seeds):
 
    - Gap-vs-radius gradient: REPRODUCED. 1D baseline gives inner gaps
