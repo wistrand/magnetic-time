@@ -30,6 +30,11 @@ struct Options {
     /// Display seconds to advance before rendering (headless).
     sim_seconds: f64,
     dump: Option<PathBuf>,
+    /// Headless: also write particle positions and local field samples as
+    /// CSV (x,y,dir_x,dir_y,w in dial units), for measurement scripts that
+    /// must not go through the renderer (stroke/dot merging biases image-
+    /// based estimators).
+    dump_positions: Option<PathBuf>,
     /// Framebuffer side in pixels (headless).
     size: u32,
     /// Initial time-speed multiplier (interactive).
@@ -55,6 +60,7 @@ impl Default for Options {
             time: None,
             sim_seconds: 0.0,
             dump: None,
+            dump_positions: None,
             size: 800,
             speed: 1.0,
             views: DebugViews::default(),
@@ -71,6 +77,8 @@ impl Default for Options {
 #[cfg(not(target_arch = "wasm32"))]
 const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM:SS]
                      [--sim-seconds N] [--size PX] [--speed N]
+                     [--dump-positions PATH]  headless: also write particle
+                     positions + local field as CSV (x,y,dir_x,dir_y,w)
                      [--view field,quiver,dipoles,velocity,hash]
                      [--particles N] [--seed N] [--stroke-len F]
                      [--palette ice|ember|emerald|violet|mono] [--bg RRGGBB]
@@ -81,6 +89,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--chain-neighbors N] [--dt F] [--field-clamp F] [--fluid-scale F]
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
+                     [--chain-cone DEG]  experimental: restrict chain attraction
+                     to +-DEG of the moment axis (0 = physical 54.7 cone)
                      [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
                      [--pointer-visual F]  pointer weight in stroke color/orientation
                      [--anneal-from F --anneal-for SECONDS]  headless: run the
@@ -114,6 +124,9 @@ fn parse_args() -> Result<Options, String> {
                     .map_err(|e| format!("--sim-seconds: {e}"))?
             }
             "--dump" => opts.dump = Some(PathBuf::from(value("--dump", &mut args)?)),
+            "--dump-positions" => {
+                opts.dump_positions = Some(PathBuf::from(value("--dump-positions", &mut args)?))
+            }
             "--size" => {
                 opts.size = value("--size", &mut args)?
                     .parse()
@@ -174,6 +187,11 @@ fn parse_args() -> Result<Options, String> {
                 opts.sim.chain_compress = value("--chain-compress", &mut args)?
                     .parse()
                     .map_err(|e| format!("--chain-compress: {e}"))?
+            }
+            "--chain-cone" => {
+                opts.sim.chain_cone = value("--chain-cone", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--chain-cone: {e}"))?
             }
             "--chain-speed-cap" => {
                 opts.sim.chain_speed_cap = value("--chain-speed-cap", &mut args)?
@@ -341,6 +359,18 @@ fn run_headless(opts: &Options) -> Result<(), String> {
     let path = opts.dump.as_ref().unwrap();
     render::write_png(path, &fb)?;
     println!("wrote {} ({}x{}, time {})", path.display(), fb.width, fb.height, clock::format_time(t));
+    if let Some(ppath) = &opts.dump_positions {
+        let mut out = String::with_capacity(particle_sim.pos.len() * 48);
+        out.push_str("x,y,dir_x,dir_y,w\n");
+        for (p, f) in particle_sim.pos.iter().zip(&particle_sim.field) {
+            out.push_str(&format!(
+                "{:.6},{:.6},{:.4},{:.4},{:.4}\n",
+                p.x, p.y, f.dir.x, f.dir.y, f.w
+            ));
+        }
+        std::fs::write(ppath, out).map_err(|e| format!("{}: {e}", ppath.display()))?;
+        println!("wrote {} ({} particles)", ppath.display(), particle_sim.pos.len());
+    }
     Ok(())
 }
 

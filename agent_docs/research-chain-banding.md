@@ -61,6 +61,15 @@ physical; measure structure with --stroke-len 0), and the open
 wavelength/thickness question reduces to "what limits chainlets to ~2
 beads" (finding 9).
 
+SUPERSEDED 2026-07-15 (position-based re-measurement, finding 10): the
+image estimator fuses axially overlapping dots (bead spacing 4.5 px <
+dot 5 px), so it undercounts along-field structure; "~2 beads" was the
+estimator's floor, measured inside the bands of the experiment config.
+From true positions (`--dump-positions`), chains are real and
+regime-dependent: median 2-3 beads in the banded experiment config,
+median 3 / p90 7 / max 48 in the shipped rings preset. Band thickness =
+one clump and the stroke-inflation warning both stand.
+
 Stroke rendering amplifies the read: a row of aligned strokes is visually
 strong.
 
@@ -118,6 +127,8 @@ magnet is a perturbation probe, `--view chains` is the bond-level
 microscope. The missing instrument is an order parameter extracted from
 dumps (2D FFT: a zippered lattice gives a transverse Bragg-like peak, fur an
 isotropic ring); that is an analysis script, not a sim change.
+(2026-07-15: `--dump-positions` exports positions + local field as CSV for
+exactly such scripts; prefer it over image analysis, see finding 10.)
 
 Most results can also be watched live. The interactive base command matching
 the experiment configuration (quasi-static bars, second hand magnetically
@@ -559,6 +570,50 @@ creep, step budget); the dumps under `docs/debug/` are the records.
    drag the pointer slowly along an arc to pile particles into a ridge,
    raise chain strength to ~0.06 so the ridge zippers into a band, then
    watch whether it accretes neighbor rows from the surrounding gas.
+
+10. Chain length (RUN 2026-07-15). What limits chains to a few beads?
+   Every bond-scale candidate was eliminated first:
+
+   - Tidal stretching at the bead scale: differential drift across one
+     bond is ~4e-4 u/s vs 0.12 u/s bond closing capacity, a 300x margin.
+     Tides set fragment spacing, not chain length.
+   - Noise flicker/detachment: clump stats identical at noise 0.
+   - Frozen kinetics: 600 s runs shrink clumps slightly (8.6 -> 7.3 px
+     median); the short-chain state is the attractor.
+   - Energetic refolding (stagger pockets outbinding chain ends):
+     chain_compress 0..0.5 moves the bond floor 2x, length in beads is
+     flat (1.8 -> 1.4, direction opposite the prediction).
+   - Kinetic capture competition (off-axis arrivals building walls
+     instead of extending chains): gating recruitment to +-20 deg of the
+     field axis (`--chain-cone`, experimental flag in sim.rs; cone 0 is
+     byte-identical to baseline) changes nothing (8.6 -> 8.0 px median).
+     A first gate version also cut attraction for bonded pairs and every
+     aggregate disintegrated to single beads: the 20-54.7 deg attraction
+     annulus is the restoring torque stabilizing a bond against
+     rotational diffusion. Side finding, also in the sim.rs comment.
+   - 1D control (`scripts/model1d.py`): chains grow to median 52 beads
+     with the same force law and no transverse channel.
+
+   Resolution (positions, not images: `--dump-positions` + path
+   tracing): chains are real and their length is regime-dependent; the
+   limiter is absorption into dense aggregates. Dilute-zone bonds are
+   axially biased (31% within 15 deg of the local field vs 17% uniform),
+   confirming the owner's visual lineup observation. Path-traced axial
+   runs: banded experiment config median 2 / p90 3-4 / max 23; shipped
+   rings preset median 3 / p90 7 / max 48, with 43% of runs at 4+ beads.
+   Band interiors are dense near-isotropic packing (NN distance = the
+   soft-core radius, flat bond-angle histogram with a lateral excess):
+   banding erases the chains that fall in, which is why chains are short
+   exactly where the research config looks. Zippering is untouched by
+   all of this; the lateral/diagonal bond excess in band interiors is
+   the zipper.
+
+   Instrument traps (both hit during this experiment): image-based
+   estimators fuse axially overlapping dots and undercount along-field
+   structure (an earlier image-only pass here wrongly concluded "no
+   chains at all"); and connected components of axial bonds PERCOLATE in
+   dense zones (a fake 3834-bead "chain" in the rings preset), so chain
+   length must come from path tracing on positions.
 
 ## References (collected 2026-07, from abstracts/snippets; automated
 ## full-text fetch was blocked, so figure-level claims are unverified)

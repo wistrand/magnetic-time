@@ -66,6 +66,13 @@ pub struct SimParams {
     /// Max chain pair contributions per particle per step; in a dense clump
     /// the force saturates anyway and this bounds the cost.
     pub chain_max_neighbors: u32,
+    /// EXPERIMENTAL probe, not physics: half-angle in degrees that chain
+    /// attraction is restricted to around the moment axis, applied only to
+    /// recruitment (pairs beyond 1.5 chain spacings); 0 = off (the physical
+    /// dipole cone, 54.7 deg). Added 2026-07-15 to test whether off-axis
+    /// (staggered) capture is what keeps chainlets at ~2 beads: narrowing
+    /// the cone should let chains grow axially if so.
+    pub chain_cone: f64,
     /// Near-field clamp radius for point/rect field elements, dial units
     /// (passed to FieldSources::at_time; discs use their own radius if
     /// larger). Exposed 2026-07-15 to test whether the band wavelength is
@@ -112,6 +119,7 @@ impl Default for SimParams {
             pointer_visual: 0.03,
             chain_speed_cap: 0.12,
             chain_max_neighbors: 48,
+            chain_cone: 0.0,
             field_clamp: crate::field::MIN_DIST,
             fluid_scale: 1.0,
             seed: 1,
@@ -331,6 +339,15 @@ impl Sim {
         let r_rep = p.repulsion_radius;
         let chains = p.chain_strength > 0.0;
         let coupling = p.drag_coupling > 0.0;
+        // Experimental cone gate (see SimParams::chain_cone): cos^2 of the
+        // half-angle; attractive pairs whose separation axis falls outside
+        // the cone (for either moment) are dropped. Dimensionless, so no
+        // fluid_scale term.
+        let cone_t = if p.chain_cone > 0.0 {
+            p.chain_cone.to_radians().cos().powi(2)
+        } else {
+            0.0
+        };
         // Neighborhood must cover the widest active interaction.
         let range = if chains || coupling {
             p.chain_range.max(r_rep)
@@ -435,6 +452,20 @@ impl Sim {
                 // Point dipole-dipole force direction on i (r_hat points
                 // j -> i): head-to-tail attracts, side-by-side repels.
                 let bracket = mi * mjr + mj * mir + rh * (mm - 5.0 * mir * mjr);
+                // Cone gate on RECRUITMENT only (dist > 1.5 spacings): new
+                // arrivals must approach within +-chain_cone of the moment
+                // axis. Bonded-range pairs (axial and stagger) keep full
+                // physics; gating them too deletes the restoring torque of
+                // the 20-54.7 deg attraction annulus and bonds evaporate by
+                // rotational diffusion (measured 2026-07-15: aggregates
+                // disintegrate to single beads). Repulsion is never gated.
+                if cone_t > 0.0
+                    && dist > 1.5 * p.chain_spacing
+                    && bracket.dot(rh) < 0.0
+                    && (mir * mir < cone_t || mjr * mjr < cone_t)
+                {
+                    continue;
+                }
                 let fall = (r_rep / dist).powi(4);
                 chain_v += bracket * (p.chain_strength * w * fall);
             }

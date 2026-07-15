@@ -33,6 +33,9 @@ All plan phases are built and owner-tuned; the plan was promoted to
 cargo run --release                 # interactive clock
 cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.png
                                     # render offscreen, write PNG, exit (agent verification)
+                                    # --dump-positions out.csv: also write particle
+                                    #   positions + local field (measurement scripts;
+                                    #   image-based estimators fuse overlapping dots)
                                     # more flags: --view field,quiver,dipoles,velocity,hash,chains
                                     #   --particles N --seed N --size PX --stroke-len F
                                     #   --palette ice|ember|emerald|violet|mono --bg RRGGBB
@@ -44,6 +47,7 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
                                     #   --chain-strength F --chain-spacing F --chain-range F
                                     #   --chain-compress F --chain-speed-cap F --chain-neighbors N
+                                    #   --chain-cone DEG (experimental probe, 0 = off)
                                     #   --repulsion-radius F --dt F --field-clamp F --drag F
                                     #   --fluid-scale F (band-size dial; similarity transform
                                     #     of the microphysics, wavelength scales linearly)

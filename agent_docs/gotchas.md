@@ -134,6 +134,26 @@ what implementation teaches; correct entries that turn out wrong.
   diffusion range, so the known D ~ noise^2*dt noise-model wart is not the
   mechanism; it is integrator overshoot in the deterministic forces.
 
+## Findings from the chain-length measurement (positions vs images)
+
+- Image-based structure estimators on dot dumps (`--stroke-len 0`) fuse
+  axially overlapping dots (bead spacing 4.5 px < dot diameter 5 px), so
+  they systematically undercount along-field structure. An image-only
+  pass concluded "no chains exist" in a regime where position data shows
+  axial runs of 3-7+ beads. Measure structure from `--dump-positions`
+  (positions + local field CSV), never from rendered pixels.
+- Connected components of axial bonds percolate in dense zones: a
+  bond-angle threshold keeps ~1/3 of bonds, and at ~9 bonds/particle
+  that is far above the percolation threshold (one "chain" of 3834
+  beads). Chain length must be measured by path tracing (best-aligned
+  bond forward/backward per bead), not by component size.
+- The 20-54.7 deg annulus of the dipole attraction cone is the restoring
+  torque that keeps a bonded pair aligned against rotational diffusion.
+  Cutting attraction outside a narrow axial cone for bonded pairs
+  disintegrates every aggregate to single beads; the experimental
+  `--chain-cone` gate therefore exempts bonded-range pairs and gates
+  recruitment only (see the comment in `src/sim.rs`).
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears

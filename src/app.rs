@@ -330,6 +330,10 @@ impl ClockApp {
                             .text("chain compression"),
                     );
                     ui.add(
+                        egui::Slider::new(&mut p.chain_cone, 0.0..=54.7)
+                            .text("chain cone (exp, 0 = off)"),
+                    );
+                    ui.add(
                         egui::Slider::new(&mut p.chain_speed_cap, 0.005..=0.5)
                             .logarithmic(true)
                             .text("chain speed cap"),
