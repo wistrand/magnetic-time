@@ -103,6 +103,22 @@ what implementation teaches; correct entries that turn out wrong.
 - After changing any `#[wasm_bindgen]` signature, the JS glue in
   `docs/app/pkg/` is stale until the owner reruns `scripts/build-web.sh`.
 
+## Findings from the neighbor-cap bias fix
+
+- The chain pair force caps its neighbor count (chain_max_neighbors). When
+  the cap binds, WHICH neighbors count depends on hash iteration order; the
+  original raster-order scan (cells top-to-bottom, left-to-right) kept
+  upper-left neighbors, giving capped runs a net force bias that visibly
+  drifted bands toward the upper left (owner-found at cap ~12).
+  `SpatialHash::for_near` now visits cells nearest ring first, so a binding
+  cap keeps the closest neighbors: isotropic and physically right for a
+  1/r^4 force. Keep any future capped/truncated neighbor loops
+  distance-ordered, never scan-ordered.
+- The fix re-baselined default dumps slightly (the cap binds inside dense
+  clumps even at 48); character unchanged, verified visually 2026-07-15.
+  Any low-cap experiment data from before the fix is contaminated by the
+  drift artifact.
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears

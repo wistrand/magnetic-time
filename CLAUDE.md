@@ -41,7 +41,8 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
                                     #   --strengths F (one value, or hour,minute,second)
                                     #   --chain-strength F --chain-spacing F --chain-range F
-                                    #   --chain-compress F --drag F
+                                    #   --chain-compress F --chain-speed-cap F --chain-neighbors N
+                                    #   --repulsion-radius F --dt F --drag F
                                     #   --pointer-strength F --pointer-radius F --pointer-visual F
                                     #     (touch/mouse magnet; visual = weight in stroke color)
 magnetic-time --grad-check          # verify analytic field gradient vs numeric; run after

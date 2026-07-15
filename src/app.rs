@@ -303,6 +303,11 @@ impl ClockApp {
                             .text("repulsion"),
                     );
                     ui.add(
+                        egui::Slider::new(&mut p.repulsion_radius, 0.002..=0.05)
+                            .logarithmic(true)
+                            .text("repulsion radius"),
+                    );
+                    ui.add(
                         egui::Slider::new(&mut p.chain_strength, 0.0..=0.15)
                             .text("chain strength"),
                     );
@@ -322,6 +327,21 @@ impl ClockApp {
                     ui.add(
                         egui::Slider::new(&mut p.chain_compress, 0.0..=1.0)
                             .text("chain compression"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.chain_speed_cap, 0.005..=0.5)
+                            .logarithmic(true)
+                            .text("chain speed cap"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.chain_max_neighbors, 4..=192)
+                            .logarithmic(true)
+                            .text("chain neighbors"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut p.dt, 0.004..=0.1)
+                            .logarithmic(true)
+                            .text("dt (s)"),
                     );
                     ui.add(
                         egui::Slider::new(&mut p.drag_coupling, 0.0..=1.0)

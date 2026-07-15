@@ -27,13 +27,26 @@ Consequences:
 3. Staggered by half a bead spacing, each bead sits diagonally next to its
    neighbor chain's gap, inside the attractive cone: chains lock laterally
    ("zippering").
-4. Many chains in staggered registry form a 2D lattice. Its transverse rows,
-   correlated bead positions across chains, are the perpendicular bands.
+4. The zipper bond is lateral, so what the aggregate becomes depends on
+   chain length. Long chains (the lab case) zipper into thick columns ALONG
+   the field. Here chains stay short (a few beads, the dashes in every
+   ring), so aggregates grow bond-by-bond in the lateral direction instead:
+   a band is a long lateral stack of short chainlets, elongated ACROSS the
+   field. The exp-4 bond view confirms lateral bonds running along each
+   band.
 
-In the literature this is chain zippering / lateral coalescence, ending in
-BCT columns in 3D; our 2D equivalent is a centered-rectangular lattice.
-Stroke rendering amplifies the read: a transverse row of aligned strokes is
-visually strong.
+CORRECTION 2026-07-15 (owner challenge): an earlier version of point 4
+claimed the bands are "transverse rows of a 2D zippered lattice". That is
+unsupported at our band thickness (2-4 rows) and confused the picture;
+zippering by itself builds field-parallel structure, and the perpendicular
+elongation comes from the short-chain + unbounded-lateral-stacking geometry
+above. Why chains stay short is unexplained and is another face of the
+open wavelength question (finding 9). Note also that the literature support
+for field-perpendicular bands comes from UNSTEADY-field studies; treat that
+analogy as weak for our static-pole configuration.
+
+Stroke rendering amplifies the read: a row of aligned strokes is visually
+strong.
 
 ## What sets the spacings
 
@@ -314,6 +327,39 @@ creep, step budget); the dumps under `docs/debug/` are the records.
    fixed spacing for about four minutes (the plateau), then the pole eats
    them in quick succession (the cliff), leaving one wall. "reset
    particles" replays it.
+
+9. Band-spacing selection (follow-up sweeps, RUN 2026-07-15). What sets the
+   plateau ring spacing (~35 px ~ 0.075 dial units)? Answer so far: nothing
+   we can find. Two quantitative hypotheses were falsified:
+
+   - Drift x aggregation-time (lambda ~ max_speed x tau): spacing is ~35 px
+     at every max_speed across 0.0125..0.2, a 16x range (3 seeds x 2 ages).
+   - Mass balance (spacing ~ 1/density): spacing is 39/39/34/51 px at
+     3000/6000/12000/24000 particles; flat to mildly INCREASING, opposite
+     of the prediction.
+   - chain_range alone (frozen-coarsening-at-cutoff): 32/34/30 px at
+     0.0114/0.0228/0.0456. Flat.
+
+   Combined with exp-1: the wavelength is invariant to max_speed (16x),
+   density (8x), chain_range (4x), chain_spacing+range together (2x, +16%),
+   seed, plateau age, and radius (uniform spacing despite the steep field
+   gradient). Instrument checked visually at the sweep extremes; the
+   invariance is real, not a detector bandpass artifact (the detector also
+   reported 51-64 px for the dense runs).
+
+   Remaining knobs (mobility, noise, repulsion_strength, repulsion_radius,
+   magnet strength, dt, chain_speed_cap, chain_max_neighbors) were all
+   given sliders and CLI flags on 2026-07-15 for this question, and the
+   owner then tested them manually: no correlation with the wavelength.
+   Status: open question with every parameter eliminated at manual-test
+   resolution. The system selects a robust ~0.075-unit wavelength during
+   condensation; whatever picks it appears emergent from the early
+   condensation dynamics (the t=30 fine rings consolidate to this scale by
+   t~60-90 and freeze), not any single knob. Side result of the manual
+   test: low chain_max_neighbors exposed a scan-order force bias (bands
+   drifting upper-left), fixed by distance-ordering neighbor visits; see
+   [gotchas.md](gotchas.md). Low-cap observations from before that fix are
+   contaminated.
 
 8. Template reproduction. Seed one band next to uniform gas (pointer);
    does it accrete an adjacent row (autocatalytic lateral growth)? This is

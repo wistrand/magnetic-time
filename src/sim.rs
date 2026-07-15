@@ -60,18 +60,18 @@ pub struct SimParams {
     /// dish (its 1/r^2 magnitude exceeds b_sat everywhere at useful
     /// strengths).
     pub pointer_visual: f64,
+    /// Cap on the summed chain velocity per particle, units/s (stability).
+    /// This, not max_speed, is the speed limit of zippering dynamics.
+    pub chain_speed_cap: f64,
+    /// Max chain pair contributions per particle per step; in a dense clump
+    /// the force saturates anyway and this bounds the cost.
+    pub chain_max_neighbors: u32,
     pub seed: u64,
 }
 
 /// Per-step low-pass factor for the display weight `w_disp`; press/release
 /// fades over roughly 5 steps (~1/6 display-second) instead of flashing.
 const W_DISP_SMOOTH: f64 = 0.2;
-
-/// Cap on the summed chain velocity per particle, units/s (stability).
-const CHAIN_SPEED_CAP: f64 = 0.12;
-/// Max chain pair contributions per particle per step; in a dense clump the
-/// force saturates anyway and this bounds the cost.
-const CHAIN_MAX_NEIGHBORS: u32 = 48;
 
 // Defaults are the owner-tuned "rings" preset from 2026-07-14
 // (screenshot-approved, full-length bar magnets); change only with the owner.
@@ -97,6 +97,8 @@ impl Default for SimParams {
             pointer_strength: 30.0,
             pointer_radius: 0.05,
             pointer_visual: 0.03,
+            chain_speed_cap: 0.12,
+            chain_max_neighbors: 48,
             seed: 1,
         }
     }
@@ -161,16 +163,24 @@ impl SpatialHash {
     }
 
     /// Visit all particles within `k` cells of p's cell (including p itself;
-    /// the caller filters). k=1 covers the repulsion radius, k=2 the chain
-    /// cutoff.
+    /// the caller filters). Cells are visited nearest ring first (Chebyshev
+    /// distance 0, 1, .., k): callers that cap the number of contributions
+    /// (the chain pair force) then keep the closest neighbors instead of a
+    /// scan-order-biased subset. A raster-order scan here caused capped
+    /// runs to drift bands toward the upper left (owner-reported bug).
     fn for_near(&self, p: Vec2, k: i32, mut f: impl FnMut(usize)) {
-        let (gx, gy) = self.cell_of(p);
-        for gy in (gy - k).max(0)..=(gy + k).min(self.dims - 1) {
-            for gx in (gx - k).max(0)..=(gx + k).min(self.dims - 1) {
-                let mut j = self.heads[(gy * self.dims + gx) as usize];
-                while j >= 0 {
-                    f(j as usize);
-                    j = self.next[j as usize];
+        let (cx, cy) = self.cell_of(p);
+        for ring in 0..=k {
+            for gy in (cy - ring).max(0)..=(cy + ring).min(self.dims - 1) {
+                for gx in (cx - ring).max(0)..=(cx + ring).min(self.dims - 1) {
+                    if (gy - cy).abs().max((gx - cx).abs()) != ring {
+                        continue;
+                    }
+                    let mut j = self.heads[(gy * self.dims + gx) as usize];
+                    while j >= 0 {
+                        f(j as usize);
+                        j = self.next[j as usize];
+                    }
                 }
             }
         }
@@ -284,6 +294,11 @@ impl Sim {
     /// scheduling (noise streams are keyed by particle index and step).
     pub fn step(&mut self, sources: &FieldSources) {
         let p = self.params;
+        // The hash cell size tracks repulsion_radius; rebuild the grid when
+        // the radius is changed live.
+        if (self.hash.cell - p.repulsion_radius).abs() > f64::EPSILON {
+            self.hash = SpatialHash::new(p.repulsion_radius);
+        }
         self.hash.build(&self.pos);
         let r_rep = p.repulsion_radius;
         let chains = p.chain_strength > 0.0;
@@ -360,7 +375,7 @@ impl Sim {
                 if dist < r_rep {
                     rep += (d / dist) * (1.0 - dist / r_rep);
                 }
-                if chains && dist < p.chain_range && pairs < CHAIN_MAX_NEIGHBORS {
+                if chains && dist < p.chain_range && pairs < p.chain_max_neighbors {
                     let w = wi * field[j].w;
                     if w < 1e-3 {
                         return;
@@ -384,8 +399,8 @@ impl Sim {
             });
             v += rep * p.repulsion_strength;
             let cl = chain_v.len();
-            if cl > CHAIN_SPEED_CAP {
-                chain_v = chain_v * (CHAIN_SPEED_CAP / cl);
+            if cl > p.chain_speed_cap {
+                chain_v = chain_v * (p.chain_speed_cap / cl);
             }
             v += chain_v;
 

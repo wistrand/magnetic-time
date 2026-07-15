@@ -77,6 +77,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--max-px N]  cap interactive render resolution (0 = off)
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
+                     [--repulsion-radius F] [--chain-speed-cap F]
+                     [--chain-neighbors N] [--dt F]
                      [--chain-strength F] [--chain-spacing F] [--chain-range F]
                      [--chain-compress F] [--drag F]
                      [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
@@ -172,6 +174,26 @@ fn parse_args() -> Result<Options, String> {
                 opts.sim.chain_compress = value("--chain-compress", &mut args)?
                     .parse()
                     .map_err(|e| format!("--chain-compress: {e}"))?
+            }
+            "--chain-speed-cap" => {
+                opts.sim.chain_speed_cap = value("--chain-speed-cap", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--chain-speed-cap: {e}"))?
+            }
+            "--chain-neighbors" => {
+                opts.sim.chain_max_neighbors = value("--chain-neighbors", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--chain-neighbors: {e}"))?
+            }
+            "--repulsion-radius" => {
+                opts.sim.repulsion_radius = value("--repulsion-radius", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--repulsion-radius: {e}"))?
+            }
+            "--dt" => {
+                opts.sim.dt = value("--dt", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--dt: {e}"))?
             }
             "--drag" => {
                 opts.sim.drag_coupling = value("--drag", &mut args)?
