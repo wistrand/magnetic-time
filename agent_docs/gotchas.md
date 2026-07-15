@@ -174,6 +174,36 @@ what implementation teaches; correct entries that turn out wrong.
   `--chain-cone` gate therefore exempts bonded-range pairs and gates
   recruitment only (see the comment in `src/sim.rs`).
 
+## Findings from input validation
+
+- Three input paths set sim params, and they consume ONE bounds table:
+  the `bounds` module in `src/sim.rs`, one `Bound` const per float field.
+  Each `Bound` carries a hard-valid range (what can run) and an
+  interactive range (a subset, for comfort). The CLI (`src/main.rs`)
+  calls `Bound::validate` and hard-errors, because a user who typed
+  `--dt 0` wants to be told; the web setters (`src/web.rs`) call
+  `Bound::clamp` and the sliders (`src/app.rs`) call `Bound::ui`, both
+  silent because a live control has no error channel. To change a limit,
+  edit the const; never re-add a literal in a consumer. The interactive
+  range is deliberately tighter than valid (e.g. fluid_scale valid > 0,
+  interactive 0.1..8.0), so the CLI reaches values the sliders will not
+  (verified: `--fluid-scale 12` runs).
+- `Bound::clamp` is only called from the wasm-only `web.rs`, so it needs
+  `#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]` or the
+  native build warns (the mirror of main.rs's wasm dead-code allow).
+- The CLI had NO range validation before 2026-07-15, only `.parse()` type
+  checks. Two inputs crashed or hung rather than producing bad art: `dt
+  <= 0` set the step count to `u64::MAX` via `(seconds/dt) as u64`
+  (saturating cast), an effective hang; and any input driving the hash
+  cell to 0 (`--fluid-scale 0`, `--repulsion-radius 0` with chains off)
+  made `dims = (2.0/cell) as i32` overflow to `i32::MAX` and panicked in
+  `for_near`. `validate` rejects both, plus NaN/inf (which parse from the
+  CLI as "nan"/"inf" and would poison positions silently).
+- Field-element flags (`--magnets`/`--shapes`/`--strengths`) were already
+  safe from every path: their parsers in `src/field.rs` clamp (count
+  1..16, length fraction 0..2, disc radius 0.005..0.3). Only the scalar
+  sim params were unguarded.
+
 ## Decision history
 
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears

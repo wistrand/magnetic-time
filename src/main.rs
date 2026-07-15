@@ -292,6 +292,25 @@ fn parse_args() -> Result<Options, String> {
     if opts.headless && opts.dump.is_none() {
         return Err("--headless requires --dump PATH".to_string());
     }
+    // Range-check the sim parameters (the CLI is the one input path with no
+    // per-control clamp; see SimParams::validate). Also the few Options-level
+    // numbers that feed the sim.
+    opts.sim.validate()?;
+    if !opts.sim_seconds.is_finite() || opts.sim_seconds < 0.0 {
+        return Err(format!("--sim-seconds must be finite and >= 0, got {}", opts.sim_seconds));
+    }
+    if opts.size == 0 {
+        return Err("--size must be >= 1".to_string());
+    }
+    if !opts.speed.is_finite() {
+        return Err(format!("--speed must be finite, got {}", opts.speed));
+    }
+    if opts.anneal_for > 0.0 && (!opts.anneal_from.is_finite() || opts.anneal_from < 0.0) {
+        return Err(format!(
+            "--anneal-from must be finite and >= 0, got {}",
+            opts.anneal_from
+        ));
+    }
     Ok(opts)
 }
 

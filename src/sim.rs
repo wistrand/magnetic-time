@@ -130,6 +130,136 @@ impl Default for SimParams {
     }
 }
 
+/// Single owner of every tunable's limits. Each [`bounds::Bound`] is used
+/// three ways from one definition: the CLI rejects out-of-range input
+/// ([`Bound::validate`]), and the web setters and dev-panel sliders clamp
+/// and display within the interactive range ([`Bound::clamp`], [`Bound::ui`]).
+/// The interactive range is a subset of the valid range: sliders stay in a
+/// comfortable band while the CLI can still reach the full runnable range.
+pub mod bounds {
+    use std::ops::RangeInclusive;
+
+    pub struct Bound {
+        /// Hard valid minimum (what the CLI accepts).
+        lo: f64,
+        /// Is `lo` itself valid? false = strictly greater (e.g. dt > 0,
+        /// where 0 hangs or panics). true = >= (negative is meaningless
+        /// but 0 runs).
+        lo_incl: bool,
+        /// Hard valid maximum; `f64::INFINITY` = unbounded above.
+        hi: f64,
+        /// Interactive clamp and slider range, a subset of `[lo, hi]`.
+        ui_lo: f64,
+        ui_hi: f64,
+    }
+
+    impl Bound {
+        /// CLI: reject non-finite or out-of-range, with a flag-named message.
+        pub fn validate(&self, flag: &str, v: f64) -> Result<(), String> {
+            let in_lo = if self.lo_incl { v >= self.lo } else { v > self.lo };
+            if v.is_finite() && in_lo && v <= self.hi {
+                return Ok(());
+            }
+            let lo = if self.lo_incl {
+                format!(">= {}", self.lo)
+            } else {
+                format!("> {}", self.lo)
+            };
+            let hi = if self.hi.is_finite() {
+                format!(" and <= {}", self.hi)
+            } else {
+                String::new()
+            };
+            Err(format!("{flag} must be a finite value {lo}{hi}, got {v}"))
+        }
+
+        /// Web/slider: force into the interactive range (NaN -> lower bound,
+        /// since `f64::clamp` cannot order NaN). Only the wasm build clamps;
+        /// the native CLI validates instead.
+        #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+        pub fn clamp(&self, v: f64) -> f64 {
+            if v.is_nan() {
+                self.ui_lo
+            } else {
+                v.clamp(self.ui_lo, self.ui_hi)
+            }
+        }
+
+        /// Slider min..=max.
+        pub fn ui(&self) -> RangeInclusive<f64> {
+            self.ui_lo..=self.ui_hi
+        }
+    }
+
+    const INF: f64 = f64::INFINITY;
+    /// `>= 0`, unbounded above, with a slider band.
+    const fn non_neg(ui_lo: f64, ui_hi: f64) -> Bound {
+        Bound { lo: 0.0, lo_incl: true, hi: INF, ui_lo, ui_hi }
+    }
+    /// `> 0`, unbounded above, with a slider band.
+    const fn positive(ui_lo: f64, ui_hi: f64) -> Bound {
+        Bound { lo: 0.0, lo_incl: false, hi: INF, ui_lo, ui_hi }
+    }
+    /// `0..=1` fraction.
+    const fn unit(ui_hi: f64) -> Bound {
+        Bound { lo: 0.0, lo_incl: true, hi: 1.0, ui_lo: 0.0, ui_hi }
+    }
+
+    pub const MOBILITY: Bound = non_neg(1e-10, 1e-6);
+    pub const MAX_SPEED: Bound = non_neg(0.005, 0.3);
+    pub const NOISE: Bound = non_neg(0.0, 0.05);
+    pub const REPULSION_STRENGTH: Bound = non_neg(0.0, 0.3);
+    pub const REPULSION_RADIUS: Bound = positive(0.002, 0.05);
+    pub const CHAIN_STRENGTH: Bound = non_neg(0.0, 0.15);
+    pub const B_SAT: Bound = positive(1.0, 2000.0);
+    pub const CHAIN_SPACING: Bound = non_neg(0.002, 0.04);
+    pub const CHAIN_RANGE: Bound = non_neg(0.005, 0.06);
+    pub const CHAIN_COMPRESS: Bound = unit(1.0);
+    pub const CHAIN_CONE: Bound = non_neg(0.0, 54.7);
+    pub const CHAIN_SPEED_CAP: Bound = non_neg(0.005, 0.5);
+    pub const DT: Bound = positive(0.004, 0.1);
+    pub const FIELD_CLAMP: Bound = positive(0.005, 0.08);
+    pub const FLUID_SCALE: Bound = positive(0.1, 8.0);
+    pub const DRAG_COUPLING: Bound = unit(1.0);
+    pub const POINTER_STRENGTH: Bound = non_neg(0.0, 150.0);
+    pub const POINTER_RADIUS: Bound = positive(0.005, 0.5);
+    pub const POINTER_VISUAL: Bound = unit(1.0);
+}
+
+impl SimParams {
+    /// Reject values that would crash, hang, or make the sim degenerate.
+    /// The CLI calls this after parsing and hard-errors with the message
+    /// (`src/main.rs`). Bounds live in [`bounds`]; the web setters and
+    /// sliders clamp to the same definitions instead of erroring, because a
+    /// live control has no error channel. NaN/inf are rejected here too
+    /// (they parse from the CLI as "nan"/"inf" and would poison positions).
+    pub fn validate(&self) -> Result<(), String> {
+        if self.count == 0 {
+            return Err("--particles must be >= 1".to_string());
+        }
+        bounds::MOBILITY.validate("--mobility", self.mobility)?;
+        bounds::MAX_SPEED.validate("--max-speed", self.max_speed)?;
+        bounds::NOISE.validate("--noise", self.noise)?;
+        bounds::REPULSION_STRENGTH.validate("--repulsion", self.repulsion_strength)?;
+        bounds::REPULSION_RADIUS.validate("--repulsion-radius", self.repulsion_radius)?;
+        bounds::CHAIN_STRENGTH.validate("--chain-strength", self.chain_strength)?;
+        bounds::B_SAT.validate("b_sat", self.b_sat)?;
+        bounds::CHAIN_SPACING.validate("--chain-spacing", self.chain_spacing)?;
+        bounds::CHAIN_RANGE.validate("--chain-range", self.chain_range)?;
+        bounds::CHAIN_COMPRESS.validate("--chain-compress", self.chain_compress)?;
+        bounds::CHAIN_CONE.validate("--chain-cone", self.chain_cone)?;
+        bounds::CHAIN_SPEED_CAP.validate("--chain-speed-cap", self.chain_speed_cap)?;
+        bounds::DT.validate("--dt", self.dt)?;
+        bounds::FIELD_CLAMP.validate("--field-clamp", self.field_clamp)?;
+        bounds::FLUID_SCALE.validate("--fluid-scale", self.fluid_scale)?;
+        bounds::DRAG_COUPLING.validate("--drag", self.drag_coupling)?;
+        bounds::POINTER_STRENGTH.validate("--pointer-strength", self.pointer_strength)?;
+        bounds::POINTER_RADIUS.validate("--pointer-radius", self.pointer_radius)?;
+        bounds::POINTER_VISUAL.validate("--pointer-visual", self.pointer_visual)?;
+        Ok(())
+    }
+}
+
 /// SplitMix64: tiny deterministic RNG, no dependency.
 pub struct Rng(u64);
 

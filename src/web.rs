@@ -159,72 +159,72 @@ impl WebHandle {
     }
 
     pub fn set_mobility(&self, v: f64) {
-        self.config.borrow_mut().sim.mobility = v.max(0.0);
+        self.config.borrow_mut().sim.mobility = crate::sim::bounds::MOBILITY.clamp(v);
         self.push();
     }
 
     pub fn set_max_speed(&self, v: f64) {
-        self.config.borrow_mut().sim.max_speed = v.max(0.0);
+        self.config.borrow_mut().sim.max_speed = crate::sim::bounds::MAX_SPEED.clamp(v);
         self.push();
     }
 
     pub fn set_noise(&self, v: f64) {
-        self.config.borrow_mut().sim.noise = v.max(0.0);
+        self.config.borrow_mut().sim.noise = crate::sim::bounds::NOISE.clamp(v);
         self.push();
     }
 
     pub fn set_repulsion(&self, v: f64) {
-        self.config.borrow_mut().sim.repulsion_strength = v.max(0.0);
+        self.config.borrow_mut().sim.repulsion_strength = crate::sim::bounds::REPULSION_STRENGTH.clamp(v);
         self.push();
     }
 
     pub fn set_chain_strength(&self, v: f64) {
-        self.config.borrow_mut().sim.chain_strength = v.max(0.0);
+        self.config.borrow_mut().sim.chain_strength = crate::sim::bounds::CHAIN_STRENGTH.clamp(v);
         self.push();
     }
 
     pub fn set_chain_spacing(&self, v: f64) {
-        self.config.borrow_mut().sim.chain_spacing = v.max(0.0);
+        self.config.borrow_mut().sim.chain_spacing = crate::sim::bounds::CHAIN_SPACING.clamp(v);
         self.push();
     }
 
     pub fn set_chain_range(&self, v: f64) {
-        self.config.borrow_mut().sim.chain_range = v.max(0.0);
+        self.config.borrow_mut().sim.chain_range = crate::sim::bounds::CHAIN_RANGE.clamp(v);
         self.push();
     }
 
     pub fn set_chain_compress(&self, v: f64) {
-        self.config.borrow_mut().sim.chain_compress = v.clamp(0.0, 1.0);
+        self.config.borrow_mut().sim.chain_compress = crate::sim::bounds::CHAIN_COMPRESS.clamp(v);
         self.push();
     }
 
     pub fn set_drag(&self, v: f64) {
-        self.config.borrow_mut().sim.drag_coupling = v.clamp(0.0, 1.0);
+        self.config.borrow_mut().sim.drag_coupling = crate::sim::bounds::DRAG_COUPLING.clamp(v);
         self.push();
     }
 
     /// Touch/mouse magnet strength; 0 disables interaction.
     pub fn set_pointer_strength(&self, v: f64) {
-        self.config.borrow_mut().sim.pointer_strength = v.max(0.0);
+        self.config.borrow_mut().sim.pointer_strength = crate::sim::bounds::POINTER_STRENGTH.clamp(v);
         self.push();
     }
 
     pub fn set_pointer_radius(&self, v: f64) {
-        self.config.borrow_mut().sim.pointer_radius = v.clamp(0.005, 0.5);
+        self.config.borrow_mut().sim.pointer_radius = crate::sim::bounds::POINTER_RADIUS.clamp(v);
         self.push();
     }
 
     /// The pointer's weight in stroke color/orientation (0..=1); force is
     /// unaffected.
     pub fn set_pointer_visual(&self, v: f64) {
-        self.config.borrow_mut().sim.pointer_visual = v.clamp(0.0, 1.0);
+        self.config.borrow_mut().sim.pointer_visual = crate::sim::bounds::POINTER_VISUAL.clamp(v);
         self.push();
     }
 
     /// Fluid coarseness: similarity transform of the particle microphysics;
     /// the band wavelength scales linearly with it.
     pub fn set_fluid_scale(&self, v: f64) {
-        self.config.borrow_mut().sim.fluid_scale = v.clamp(0.1, 8.0);
+        self.config.borrow_mut().sim.fluid_scale = crate::sim::bounds::FLUID_SCALE.clamp(v);
         self.push();
     }
 

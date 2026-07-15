@@ -289,52 +289,52 @@ impl ClockApp {
                 {
                     let p = &mut self.sim.params;
                     ui.add(
-                        egui::Slider::new(&mut p.mobility, 1e-10..=1e-6)
+                        egui::Slider::new(&mut p.mobility, crate::sim::bounds::MOBILITY.ui())
                             .logarithmic(true)
                             .text("mobility"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.max_speed, 0.005..=0.3)
+                        egui::Slider::new(&mut p.max_speed, crate::sim::bounds::MAX_SPEED.ui())
                             .logarithmic(true)
                             .text("max speed"),
                     );
-                    ui.add(egui::Slider::new(&mut p.noise, 0.0..=0.05).text("noise"));
+                    ui.add(egui::Slider::new(&mut p.noise, crate::sim::bounds::NOISE.ui()).text("noise"));
                     ui.add(
-                        egui::Slider::new(&mut p.repulsion_strength, 0.0..=0.3)
+                        egui::Slider::new(&mut p.repulsion_strength, crate::sim::bounds::REPULSION_STRENGTH.ui())
                             .text("repulsion"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.repulsion_radius, 0.002..=0.05)
+                        egui::Slider::new(&mut p.repulsion_radius, crate::sim::bounds::REPULSION_RADIUS.ui())
                             .logarithmic(true)
                             .text("repulsion radius"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.chain_strength, 0.0..=0.15)
+                        egui::Slider::new(&mut p.chain_strength, crate::sim::bounds::CHAIN_STRENGTH.ui())
                             .text("chain strength"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.b_sat, 1.0..=2000.0)
+                        egui::Slider::new(&mut p.b_sat, crate::sim::bounds::B_SAT.ui())
                             .logarithmic(true)
                             .text("chain threshold |B|"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.chain_spacing, 0.002..=0.04)
+                        egui::Slider::new(&mut p.chain_spacing, crate::sim::bounds::CHAIN_SPACING.ui())
                             .text("chain spacing"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.chain_range, 0.005..=0.06)
+                        egui::Slider::new(&mut p.chain_range, crate::sim::bounds::CHAIN_RANGE.ui())
                             .text("chain range"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.chain_compress, 0.0..=1.0)
+                        egui::Slider::new(&mut p.chain_compress, crate::sim::bounds::CHAIN_COMPRESS.ui())
                             .text("chain compression"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.chain_cone, 0.0..=54.7)
+                        egui::Slider::new(&mut p.chain_cone, crate::sim::bounds::CHAIN_CONE.ui())
                             .text("chain cone (exp, 0 = off)"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.chain_speed_cap, 0.005..=0.5)
+                        egui::Slider::new(&mut p.chain_speed_cap, crate::sim::bounds::CHAIN_SPEED_CAP.ui())
                             .logarithmic(true)
                             .text("chain speed cap"),
                     );
@@ -344,34 +344,34 @@ impl ClockApp {
                             .text("chain neighbors"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.dt, 0.004..=0.1)
+                        egui::Slider::new(&mut p.dt, crate::sim::bounds::DT.ui())
                             .logarithmic(true)
                             .text("dt (s)"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.field_clamp, 0.005..=0.08)
+                        egui::Slider::new(&mut p.field_clamp, crate::sim::bounds::FIELD_CLAMP.ui())
                             .logarithmic(true)
                             .text("field clamp"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.fluid_scale, 0.25..=4.0)
+                        egui::Slider::new(&mut p.fluid_scale, crate::sim::bounds::FLUID_SCALE.ui())
                             .logarithmic(true)
                             .text("fluid scale"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.drag_coupling, 0.0..=1.0)
+                        egui::Slider::new(&mut p.drag_coupling, crate::sim::bounds::DRAG_COUPLING.ui())
                             .text("drag coupling"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.pointer_strength, 0.0..=150.0)
+                        egui::Slider::new(&mut p.pointer_strength, crate::sim::bounds::POINTER_STRENGTH.ui())
                             .text("pointer strength"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.pointer_radius, 0.01..=0.2)
+                        egui::Slider::new(&mut p.pointer_radius, crate::sim::bounds::POINTER_RADIUS.ui())
                             .text("pointer radius"),
                     );
                     ui.add(
-                        egui::Slider::new(&mut p.pointer_visual, 0.0..=0.5)
+                        egui::Slider::new(&mut p.pointer_visual, crate::sim::bounds::POINTER_VISUAL.ui())
                             .text("pointer visual"),
                     );
                 }
