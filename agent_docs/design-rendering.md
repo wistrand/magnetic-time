@@ -13,7 +13,7 @@ order:
    a font dependency).
 2. Hands, under the particle layer (particles float above the hands in the
    fiction).
-3. Particle layer (from phase 3).
+3. Particle layer.
 
 Interactive mode uploads the buffer via `TextureHandle::set` and draws it as a
 single image; egui contributes only the window, the dev panel, and the
@@ -54,7 +54,8 @@ there.
 Toggleable overlays, each a checkbox in the dev panel and a name in the
 `--view` flag (comma-separated):
 
-- Field magnitude heatmap (|B| on a coarse grid, color-mapped).
+- Field magnitude heatmap (per-pixel |B|, log-scaled, self-normalized per
+  frame).
 - Force quiver: `grad(|B|^2)` arrows on a grid.
 - Dipole markers: position and polarity of every hand magnet.
 - Particle velocity coloring (speed as hue) instead of the normal look.

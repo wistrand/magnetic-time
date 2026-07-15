@@ -25,8 +25,8 @@ accuracy.
 
 ## Hand magnets and the driving field
 
-Each hand carries a rigid layout of point dipoles (position along the hand,
-moment vector, polarity). Layouts are data-driven so they can be swapped per
+Each hand carries a rigid layout of magnets (position along the hand, moment
+vector, polarity, shape). Layouts are data-driven so they can be swapped per
 hand: tip-only magnet vs an alternating-polarity strip give visibly different
 particle signatures (single blob vs stripes).
 
@@ -36,7 +36,8 @@ Total B is the sum over all field elements of all hands.
 Magnets have a shape (`MagnetShape` in `src/field.rs`), which changes the
 field, not just the marker:
 
-- Point: ideal dipole, near field clamped at MIN_DIST.
+- Point: ideal dipole, near field clamped at `SimParams::field_clamp`
+  (default MIN_DIST).
 - Disc: same dipole far field (exact for a uniformly magnetized disc), near
   field clamped at the disc radius instead, giving a large soft capture zone
   with no singular core.
@@ -141,9 +142,10 @@ and ~7.5 mm bands.
   approximation of inter-particle hydrodynamics; there is still no bulk flow.
 - Brownian noise: small random velocity per step, for texture and to break
   symmetry. Deterministic RNG seeded from a config value.
-- Stirring advection: a moving hand drags nearby liquid. Modeled as a
-  tangential velocity kernel around each hand scaled by its angular speed.
-  Optional knob, off by default until tuning.
+- Stirring advection (hands dragging bulk liquid): planned, never built;
+  drag coupling turned out to cover the wanted look. Revisit only if
+  fluid-memory wakes are wanted (also listed under deferred work in
+  [architecture.md](architecture.md)).
 - Boundary: circular dish; particles are pushed back inside with a soft normal
   force (no hard reflection, it looks wrong under drag).
 

@@ -18,7 +18,9 @@ through the particles).
 More screenshots, a longer description, and a live in-browser build (wasm):
 [project page](https://wistrand.github.io/magnetic-time/)
 (source in [docs/](docs/), publishable via GitHub Pages; rebuild the wasm app
-with `./scripts/build-web.sh`).
+with `./scripts/build-web.sh`). The stripe patterns turned out to be real,
+testable physics and got their own investigation:
+[the bands are objects, not waves](https://wistrand.github.io/magnetic-time/banding.html).
 
 ## Quick start
 

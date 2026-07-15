@@ -6,8 +6,9 @@ what implementation teaches; correct entries that turn out wrong.
 ## Numerics (confirmed in practice)
 
 - Dipole fields diverge as 1/|r|^3 at the source. Evaluation distance is
-  clamped (MIN_DIST in `src/field.rs`, or the disc radius); without it forces
-  explode for particles that reach a magnet. Side effect: the field plateaus
+  clamped (`SimParams::field_clamp`, default MIN_DIST in `src/field.rs`;
+  discs clamp at their own radius); without it forces explode for particles
+  that reach a magnet. Side effect: the field plateaus
   inside the clamp, so tip clusters form shells (see phase-3 findings).
 - The attraction near field maxima is stiff. The fixed dt plus per-term speed
   caps hold it stable; cluster cores jitter at the cap instead of resting
@@ -55,8 +56,8 @@ what implementation teaches; correct entries that turn out wrong.
   per-(particle, step) streams to stay deterministic under threading. This
   changed the noise sequence: dumps differ in fine detail from pre-rayon
   runs but are still fully reproducible.
-- The |B|^2 gradient is forward-difference (2 extra field evals) instead of
-  central (4); no visible difference at GRAD_EPS in `src/sim.rs`.
+- The |B|^2 gradient was forward-difference at this point (superseded: it is
+  analytic now, see the next section).
 - When benchmarking, build first; `time cargo run` after an edit measures
   the compile, not the sim.
 
