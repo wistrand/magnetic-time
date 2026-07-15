@@ -45,6 +45,15 @@ the shared `expand` helper, so the sim and renderer are face-agnostic:
   Legibility wants low particle count and low/zero chaining (chaining bands
   each segment into rings); the rings preset is tuned for hands, not a crisp
   readout.
+- Tide (`TideClock`, `--face tide`): three concentric arcs (inner hours,
+  middle minutes, outer seconds), each a run of collinear alternating tangent
+  bars from 12 o'clock clockwise up to its fraction of the unit, capped by a
+  disc at the leading tip. Reads like filling gauges; the moving tip plows a
+  wake (fast outer tip trails a comet, slow inner one barely stirs), and at
+  rollover the arc's magnets vanish and reform at 12, so the particles dissolve
+  and recollect. Like seg, legibility wants low particle count (~5000); unlike
+  seg a little chaining is welcome, since the banding beads run along the arcs
+  and read as the gauge ticks.
 
 Field of one dipole at offset r: `B(r) = k * (3(m.r_hat)r_hat - m) / |r|^3`.
 Total B is the sum over all field elements of every magnet the face emits.

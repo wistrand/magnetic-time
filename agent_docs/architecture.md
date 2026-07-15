@@ -84,8 +84,10 @@ regime-dependent, absorbed by dense bands, not bond-limited; measured via
 spatial-hash cell fix so wide chain_range/repulsion ratios are honored, not
 truncated at 4 cells; CLI input validation via the single-owner `bounds`
 table (`SimParams::validate` errors, web/sliders clamp the same limits); and
-the `Face` abstraction adding a digital seven-segment readout (`--face seg`)
-alongside the hands, with a disc seconds marker orbiting the HH:MM face.
+the `Face` abstraction adding a digital seven-segment readout (`--face seg`,
+with a disc seconds marker orbiting the HH:MM face) and the tide arcs
+(`--face tide`) alongside the hands, all carried by one grouped `FaceConfigs`
+so a new face is a field.rs-local change.
 
 ## Deferred / gated work
 
