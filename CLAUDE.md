@@ -46,6 +46,8 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #     (touch/mouse magnet; visual = weight in stroke color)
 magnetic-time --grad-check          # verify analytic field gradient vs numeric; run after
                                     # changing field elements (honors --magnets/--shapes)
+                                    # headless two-phase runs (hysteresis experiments):
+                                    #   --anneal-from F --anneal-for SECONDS
                                     #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
                                     #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
 cargo check                         # compile check; do not run cargo test
@@ -63,6 +65,7 @@ lands.
 - [agent_docs/design-simulation.md](agent_docs/design-simulation.md): physics model: field elements, overdamped particles, chains, drag coupling, pointer magnet. Read before touching sim code.
 - [agent_docs/design-rendering.md](agent_docs/design-rendering.md): pixel-buffer rendering, themes/palettes, debug views, headless PNG dump.
 - [agent_docs/gotchas.md](agent_docs/gotchas.md): traps and decision history (numerics, egui, wasm, presets).
+- [agent_docs/research-chain-banding.md](agent_docs/research-chain-banding.md): why bands form perpendicular to chains (zippering), knobs, literature, proposed experiments.
 
 ## Invariants
 

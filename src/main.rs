@@ -40,6 +40,11 @@ struct Options {
     magnets: [field::LayoutSpec; 3],
     /// Verify the analytic gradient against central differences and exit.
     grad_check: bool,
+    /// Headless annealing: run the first `anneal_for` sim-seconds with
+    /// chain_strength = `anneal_from`, then switch to --chain-strength for
+    /// the remainder. For hysteresis experiments.
+    anneal_from: f64,
+    anneal_for: f64,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -57,6 +62,8 @@ impl Default for Options {
             sim: sim::SimParams::default(),
             magnets: field::default_specs(),
             grad_check: false,
+            anneal_from: 0.0,
+            anneal_for: 0.0,
         }
     }
 }
@@ -74,6 +81,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--chain-compress F] [--drag F]
                      [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
                      [--pointer-visual F]  pointer weight in stroke color/orientation
+                     [--anneal-from F --anneal-for SECONDS]  headless: run the
+                     first SECONDS at chain-strength F, then switch
                      [--grad-check]  verify analytic field gradient, then exit
                      [--magnets HOUR,MINUTE,SECOND]  each tip | strip:N | alt:N;
                      one value applies to all hands
@@ -206,6 +215,16 @@ fn parse_args() -> Result<Options, String> {
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
             "--grad-check" => opts.grad_check = true,
+            "--anneal-from" => {
+                opts.anneal_from = value("--anneal-from", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--anneal-from: {e}"))?
+            }
+            "--anneal-for" => {
+                opts.anneal_for = value("--anneal-for", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--anneal-for: {e}"))?
+            }
             "--help" | "-h" => return Err(USAGE.to_string()),
             other => return Err(format!("unknown argument '{other}'\n{USAGE}")),
         }
@@ -266,7 +285,17 @@ fn run_headless(opts: &Options) -> Result<(), String> {
     let start = opts.time.unwrap_or_else(|| ClockSource::wall(1.0).now());
     let layouts = field::build_layouts(&opts.magnets);
     let mut particle_sim = sim::Sim::new(opts.sim);
-    let t = particle_sim.advance(&layouts, start, opts.sim_seconds);
+    let t = if opts.anneal_for > 0.0 {
+        // Two-phase run for hysteresis experiments: anneal at one chain
+        // strength, then switch to the requested one.
+        let pre = opts.anneal_for.min(opts.sim_seconds);
+        particle_sim.params.chain_strength = opts.anneal_from;
+        let mid = particle_sim.advance(&layouts, start, pre);
+        particle_sim.params.chain_strength = opts.sim.chain_strength;
+        particle_sim.advance(&layouts, mid, opts.sim_seconds - pre)
+    } else {
+        particle_sim.advance(&layouts, start, opts.sim_seconds)
+    };
     let sources = field::FieldSources::at_time(&layouts, t);
     let mut fb = render::Framebuffer::new(opts.size, opts.size);
     render::draw_clock(
