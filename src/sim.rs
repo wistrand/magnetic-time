@@ -27,7 +27,10 @@ pub struct SimParams {
     pub max_speed: f64,
     /// Brownian speed, units/s.
     pub noise: f64,
-    /// Soft-core repulsion range (also the spatial-hash cell size).
+    /// Soft-core repulsion range. Also the spatial-hash cell size, except
+    /// that the cell grows to chain_range/4 when the range/repulsion ratio
+    /// exceeds the 4-ring neighbor search (see the cell-size rule in
+    /// `step`).
     pub repulsion_radius: f64,
     /// Repulsion speed at full overlap, units/s.
     pub repulsion_strength: f64,
@@ -330,12 +333,6 @@ impl Sim {
             p.noise *= fs;
             p.chain_speed_cap *= fs;
         }
-        // The hash cell size tracks the effective repulsion radius; rebuild
-        // the grid when it changes live.
-        if (self.hash.cell - p.repulsion_radius).abs() > f64::EPSILON {
-            self.hash = SpatialHash::new(p.repulsion_radius);
-        }
-        self.hash.build(&self.pos);
         let r_rep = p.repulsion_radius;
         let chains = p.chain_strength > 0.0;
         let coupling = p.drag_coupling > 0.0;
@@ -348,13 +345,23 @@ impl Sim {
         } else {
             0.0
         };
-        // Neighborhood must cover the widest active interaction.
+        // Neighborhood must cover the widest active interaction. The search
+        // visits at most 4 cell rings, so when range/repulsion exceeds 4
+        // (reachable from the sliders) the cell grows to range/4 instead of
+        // silently truncating the interaction: cost then scales with cell
+        // area, the honest price of a wide range.
         let range = if chains || coupling {
             p.chain_range.max(r_rep)
         } else {
             r_rep
         };
-        let k_cells = ((range / r_rep).ceil() as i32).clamp(1, 4);
+        let cell = r_rep.max(range / 4.0);
+        // Rebuild the grid when the cell size changes live.
+        if (self.hash.cell - cell).abs() > f64::EPSILON {
+            self.hash = SpatialHash::new(cell);
+        }
+        self.hash.build(&self.pos);
+        let k_cells = ((range / cell).ceil() as i32).clamp(1, 4);
 
         // Pass 1: field samples. One analytic sweep gives B (for the induced
         // moment: superparamagnetic beads align with the local field,
@@ -397,7 +404,12 @@ impl Sim {
         // Pass 2: velocities.
         let (positions, field, hash) = (&self.pos, &self.field, &self.hash);
         let noise_base = p.seed ^ self.step_index.wrapping_mul(0xD1B54A32D192ED03);
-        self.vel.par_iter_mut().enumerate().for_each(|(i, vel)| {
+        // Chain-candidate scratch is per rayon task (for_each_init), not per
+        // particle: a fresh Vec here is ~0.8M allocations/s at the default
+        // preset.
+        self.vel.par_iter_mut().enumerate().for_each_init(
+            || Vec::with_capacity(64),
+            |cand: &mut Vec<(usize, f64)>, (i, vel)| {
             let pos = positions[i];
             let mut v = field[i].fv;
 
@@ -411,7 +423,7 @@ impl Sim {
             // fluid_scale, where the cap binds constantly).
             let (mi, wi) = (field[i].dir, field[i].w);
             let mut rep = Vec2::ZERO;
-            let mut cand: Vec<(usize, f64)> = Vec::with_capacity(64);
+            cand.clear();
             hash.for_near(pos, k_cells, |j| {
                 if j == i {
                     return;
@@ -434,7 +446,7 @@ impl Sim {
                 cand.truncate(cap);
             }
             let mut chain_v = Vec2::ZERO;
-            for &(j, dist) in &cand {
+            for &(j, dist) in cand.iter() {
                 let w = wi * field[j].w;
                 if w < 1e-3 {
                     continue;
@@ -560,8 +572,9 @@ impl Sim {
     /// for the chains debug view.
     pub fn chain_bonds(&self) -> Vec<(Vec2, Vec2)> {
         let cut = self.params.chain_range * self.params.fluid_scale;
-        let k = ((cut / (self.params.repulsion_radius * self.params.fluid_scale)).ceil() as i32)
-            .clamp(1, 4);
+        // The step() cell-size rule guarantees cut/cell <= 4 while chains
+        // are active, so the view covers the true interaction range.
+        let k = ((cut / self.hash.cell).ceil() as i32).clamp(1, 4);
         let mut out = Vec::new();
         for i in 0..self.pos.len() {
             if self.field[i].w < 0.15 {

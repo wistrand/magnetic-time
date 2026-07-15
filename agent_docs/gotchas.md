@@ -60,6 +60,18 @@ what implementation teaches; correct entries that turn out wrong.
   analytic now, see the next section).
 - When benchmarking, build first; `time cargo run` after an edit measures
   the compile, not the sim.
+- The per-particle chain-candidate Vec was the hot loop's only heap
+  allocation (~0.8M allocs/s at the default preset). Moving it to a
+  per-task scratch (rayon `for_each_init`) measured 0.5%, within noise,
+  natively: glibc's thread arenas make same-size alloc/free nearly free,
+  and the neighbor pass dominates anyway. Kept because it is free,
+  dependency-less, and byte-identical; wasm (sequential rayon through
+  dlmalloc) should benefit more, unmeasured. Do not spend further effort
+  on allocator pressure here; smallvec in particular would heap-spill
+  exactly in dense clumps where the loop is hottest.
+- This machine's turbo makes cold runs ~35% faster than steady-state;
+  interleave A/B binaries after a warmup run or the comparison measures
+  thermals.
 
 ## Findings from the analytic gradient
 
@@ -121,6 +133,14 @@ what implementation teaches; correct entries that turn out wrong.
   even at 48); character unchanged, verified visually. Capped-regime data
   predating 2026-07-15 nearest-N selection is contaminated at high
   fluid_scale or low caps.
+- The neighbor search visits at most 4 hash-cell rings. Until 2026-07-15
+  the cell size was hard-wired to repulsion_radius, so slider-reachable
+  configs with chain_range/repulsion_radius > 4 (ratio up to 30) silently
+  truncated chain and drag interactions at 4 cells, and the `--view
+  chains` overlay clamped identically, hiding it. Fixed by growing the
+  cell to range/4 when the ratio exceeds 4 (the k=4 visit bound stays;
+  cost moves to scanning larger cells). Defaults are byte-identical
+  (ratio 1.9); dumps from older builds at ratios > 4 are not comparable.
 
 ## Findings from the dt-convergence check
 
