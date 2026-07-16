@@ -47,13 +47,16 @@ the shared `expand` helper, so the sim and renderer are face-agnostic:
   readout.
 - Tide (`TideClock`, `--face tide`): three concentric arcs (inner hours,
   middle minutes, outer seconds), each a run of collinear alternating tangent
-  bars from 12 o'clock clockwise up to its fraction of the unit, capped by a
-  disc at the leading tip. Reads like filling gauges; the moving tip plows a
-  wake (fast outer tip trails a comet, slow inner one barely stirs), and at
-  rollover the arc's magnets vanish and reform at 12, so the particles dissolve
-  and recollect. Like seg, legibility wants low particle count (~5000); unlike
-  seg a little chaining is welcome, since the banding beads run along the arcs
-  and read as the gauge ticks.
+  bars from 12 o'clock clockwise up to its fraction of the unit. Reads like
+  filling gauges. The bars sit on a FIXED angular grid and each fades in over
+  RAMP radians as the front reaches it: an earlier version placed `round(total
+  /D_ANG)` evenly-spaced bars, so every step the count and spacing changed and
+  the whole field jumped once a second (owner-reported). The fixed grid plus
+  fade makes the field continuous in time; the only discontinuity is the wrap
+  (arc resets to empty), where the particles dissolve and recollect, which is
+  wanted. Like seg, legibility wants low particle count (~5000); unlike seg a
+  little chaining is welcome, since the banding beads run along the arcs and
+  read as the gauge ticks.
 
 Field of one dipole at offset r: `B(r) = k * (3(m.r_hat)r_hat - m) / |r|^3`.
 Total B is the sum over all field elements of every magnet the face emits.

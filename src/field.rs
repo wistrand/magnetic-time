@@ -429,11 +429,12 @@ impl SegClock {
 /// Tide face: three concentric arcs of bar magnets, one per unit (inner
 /// hours, middle minutes, outer seconds), each drawn from 12 o'clock
 /// clockwise up to the current fraction of its unit. The arcs read like
-/// filling gauges; the moving leading tip of each arc plows a wake, so the
-/// fast outer tip trails a comet and the slow inner one barely stirs. The
-/// arcs are long chains, so they band along their length under the rings
-/// preset (the banding is the readout, not a nuisance). An alternative to
-/// [hands] and [SegClock].
+/// filling gauges. Bars sit on a fixed angular grid and each fades in as the
+/// front reaches it, so the field stays continuous instead of jumping when a
+/// bar would otherwise pop in or the whole arc re-space every step; only the
+/// wrap (arc resetting to empty) is discrete. The arcs are long chains, so
+/// they band along their length under the rings preset (the banding is the
+/// readout, not a nuisance). An alternative to [hands] and [SegClock].
 #[derive(Clone, Copy)]
 pub struct TideClock {
     /// Per-segment bar moment magnitude.
@@ -456,13 +457,17 @@ const TIDE_RADII: [f64; 3] = [0.40, 0.62, 0.85];
 
 impl TideClock {
     /// World-space magnets for a display time. Each arc is a run of collinear
-    /// alternating tangent bars (same fill trick as the seg segments) up to
-    /// its fraction, capped by a disc at the leading tip.
+    /// alternating tangent bars (same fill trick as the seg segments) on a
+    /// fixed grid up to its fraction, the leading bars fading in over RAMP.
     fn magnets_at(&self, time_secs: f64) -> Vec<(Vec2, Vec2, MagnetShape)> {
         const TAU: f64 = std::f64::consts::TAU;
         const START: f64 = -TAU / 4.0; // 12 o'clock
-        const D_ANG: f64 = 0.09; // target angular pitch between bars
+        const D_ANG: f64 = 0.09; // fixed angular pitch between bars
         const SHRINK: f64 = 0.85;
+        // Radians the front travels while a newly reached bar fades from zero
+        // to full strength. On the seconds arc (2 pi over 60 s) this is a few
+        // seconds; on the slower arcs proportionally longer, all smooth.
+        const RAMP: f64 = 0.35;
 
         let t = time_secs.rem_euclid(24.0 * 3600.0);
         let fracs = [
@@ -475,34 +480,40 @@ impl TideClock {
         for (r, frac) in TIDE_RADII.iter().zip(fracs) {
             let r = *r;
             let total = frac * TAU;
-            if total > 1e-4 {
-                let n = (total / D_ANG).round().max(1.0) as usize;
-                let step = total / n as f64;
-                let half_len = r * step / 2.0 * SHRINK;
-                for k in 0..n {
-                    let th = START + (k as f64 + 0.5) * step;
-                    let pos = Vec2::new(r * th.cos(), r * th.sin());
-                    let tang = Vec2::new(-th.sin(), th.cos());
-                    let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
-                    out.push((
-                        pos,
-                        tang * (sign * self.strength),
-                        MagnetShape::Rect {
-                            half_len,
-                            half_wid: self.half_wid,
-                        },
-                    ));
+            // Bars sit on a fixed grid and never move; earlier the count and
+            // spacing changed every step, jumping the whole field once a
+            // second. Each bar instead fades in over RAMP as the front passes
+            // it, so a bar enters at zero strength (no pop) and the field is
+            // continuous in time apart from the wrap (which resets to empty).
+            let half_len = r * D_ANG / 2.0 * SHRINK;
+            let mut k = 0usize;
+            loop {
+                // Measure along the arc from START, not by absolute angle:
+                // the front is `total` radians of arc, so a bar exists once
+                // its arc position is under it. At the wrap total drops to 0,
+                // so every bar of this arc vanishes at once (the whole ring
+                // disappears in one step, which is wanted).
+                let arc = (k as f64 + 0.5) * D_ANG;
+                let behind = total - arc; // how far the front is past this bar
+                if behind <= 0.0 {
+                    break; // grid is ordered; nothing beyond the front
                 }
+                let x = (behind / RAMP).min(1.0);
+                let ramp = x * x * (3.0 - 2.0 * x); // smoothstep 0..1
+                let th = START + arc;
+                let pos = Vec2::new(r * th.cos(), r * th.sin());
+                let tang = Vec2::new(-th.sin(), th.cos());
+                let sign = if k % 2 == 0 { 1.0 } else { -1.0 };
+                out.push((
+                    pos,
+                    tang * (sign * self.strength * ramp),
+                    MagnetShape::Rect {
+                        half_len,
+                        half_wid: self.half_wid,
+                    },
+                ));
+                k += 1;
             }
-            // Leading tip: the "now" head, brighter and a disc so its wake
-            // reads as a comet as the arc grows.
-            let th_end = START + total;
-            let pos = Vec2::new(r * th_end.cos(), r * th_end.sin());
-            out.push((
-                pos,
-                pos.normalized() * (self.strength * 1.5),
-                MagnetShape::Disc { radius: 0.045 },
-            ));
         }
         out
     }

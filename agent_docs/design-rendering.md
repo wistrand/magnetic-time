@@ -14,10 +14,11 @@ order:
    seven-segment face skips the ticks, which would read oddly behind it.
 2. The face magnets, under the particle layer (they float below the particles
    in the fiction), and only when `Style::show_hands` is set. Hands draw as
-   capsules from the time-derived angles; the seg face draws each bar and
-   colon/orbit disc from `sources.markers` (world-space, so no seg geometry
-   is duplicated in the renderer). Both default off: the particles carry the
-   reading.
+   capsules from the time-derived angles; the seg and tide faces share one
+   branch that draws each bar (and seg's colon/orbit discs) from
+   `sources.markers` (world-space, so no face geometry is duplicated in the
+   renderer, and a new marker-emitting face draws for free). All default off:
+   the particles carry the reading.
 3. Particle layer.
 
 Interactive mode uploads the buffer via `TextureHandle::set` and draws it as a

@@ -204,7 +204,7 @@ what implementation teaches; correct entries that turn out wrong.
   1..16, length fraction 0..2, disc radius 0.005..0.3). Only the scalar
   sim params were unguarded.
 
-## Findings from the seven-segment face
+## Findings from the alternative faces (seg, tide)
 
 - One bar magnet per segment does NOT render a readable segment: a bar's only
   pole faces are its two ends, so particles pool at segment junctions and the
@@ -230,7 +230,17 @@ what implementation teaches; correct entries that turn out wrong.
   face's knobs is still per-surface (CLI arm, web setter, JS attribute, dev
   slider). draw_clock's seg branch already draws any marker-emitting face
   from `sources.markers`, so a new one gets its overlay nearly free. Confirm
-  both faces stay byte-identical after the change.
+  hands and seg stay byte-identical after the change.
+- Tide's growing arcs must be placed and switched by ARC LENGTH from the
+  start angle, not by absolute angle. A bar's angle is `START + arc` where
+  `START = -pi/2` (12 o'clock); testing the front with the absolute angle
+  (`total - th`) instead of the arc length (`total - arc`) makes every arc
+  ~90 degrees too long and, worse, leaves ~90 degrees of bars alive at the
+  wrap where the ring should vanish (owner-reported: seconds magnets not
+  disappearing at 59->00). The wrap is a deliberate discontinuity (arc resets
+  to empty, whole ring gone in one step); every OTHER per-step change is
+  smoothed by the fixed grid plus the fade-in leading edge, verified by a
+  flat field-heatmap frame-to-frame sweep (ratio ~1.0 away from the wrap).
 
 ## Decision history
 
