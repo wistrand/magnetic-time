@@ -206,6 +206,11 @@ impl WebHandle {
         self.push();
     }
 
+    pub fn set_show_fps(&self, on: bool) {
+        self.config.borrow_mut().style.show_fps = on;
+        self.push();
+    }
+
     pub fn set_dev_panel(&self, on: bool) {
         self.config.borrow_mut().show_panel = on;
         self.push();

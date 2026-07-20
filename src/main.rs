@@ -48,6 +48,9 @@ struct Options {
     face: field::FaceConfigs,
     /// Write the resolved configuration as a JSON preset and exit.
     save_preset: Option<PathBuf>,
+    /// Start with the dev panel shown (interactive). Toggle at runtime with
+    /// the 12 o'clock tick either way.
+    show_panel: bool,
     /// Verify the analytic gradient against central differences and exit.
     grad_check: bool,
     /// Headless annealing: run the first `anneal_for` sim-seconds with
@@ -73,6 +76,7 @@ impl Default for Options {
             sim: sim::SimParams::default(),
             face: field::FaceConfigs::default(),
             save_preset: None,
+            show_panel: true,
             grad_check: false,
             anneal_from: 0.0,
             anneal_for: 0.0,
@@ -90,6 +94,9 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--palette ice|ember|emerald|violet|mono] [--bg RRGGBB]
                      [--max-px N]  cap interactive render resolution (0 = off)
                      [--hide-hands | --show-hands]  (default: hidden)
+                     [--no-dev-panel]  start with the dev panel hidden
+                     (interactive; tap the 12 o'clock tick to toggle)
+                     [--fps]  show a frame-rate overlay (interactive)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
                      [--chain-neighbors N] [--dt F] [--field-clamp F] [--fluid-scale F]
@@ -326,6 +333,8 @@ fn parse_args() -> Result<Options, String> {
             }
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
+            "--no-dev-panel" => opts.show_panel = false,
+            "--fps" => opts.style.show_fps = true,
             "--grad-check" => opts.grad_check = true,
             "--anneal-from" => {
                 opts.anneal_from = value("--anneal-from", &mut args)?
@@ -515,7 +524,7 @@ fn main() -> ExitCode {
                 opts.style,
                 opts.sim,
                 opts.face,
-                true,
+                opts.show_panel,
                 None,
             )))
         }),

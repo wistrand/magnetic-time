@@ -162,6 +162,9 @@ pub struct Style {
     /// resolution. The texture upscales linearly, trading sharpness for
     /// raster cost. Headless --size is unaffected.
     pub max_px: u32,
+    /// Draw a smoothed FPS overlay (interactive only; egui text, not the
+    /// pixel buffer).
+    pub show_fps: bool,
 }
 
 // Part of the owner-tuned "rings" preset: hands hidden, time read from the
@@ -174,6 +177,7 @@ impl Default for Style {
             palette: Palette::Ice,
             bg: DEFAULT_BG,
             max_px: 700,
+            show_fps: false,
         }
     }
 }

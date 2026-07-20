@@ -423,7 +423,10 @@ impl ClockApp {
                 ui.label(status.clone());
             }
         }
-        ui.checkbox(&mut self.style.show_hands, "show hands/magnets");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.style.show_hands, "show hands/magnets");
+            ui.checkbox(&mut self.style.show_fps, "fps");
+        });
         ui.add(egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0).text("stroke length"));
         ui.horizontal(|ui| {
             ui.label("palette");
@@ -586,6 +589,28 @@ impl eframe::App for ClockApp {
 
         if self.show_panel {
             self.dev_panel(ctx);
+        }
+
+        if self.style.show_fps {
+            // egui's smoothed frame time; overlaid as a corner label (the
+            // pixel buffer has no text). Floats above the clock, panel or not.
+            let fps = 1.0 / ctx.input(|i| i.stable_dt).max(1e-6);
+            egui::Area::new(egui::Id::new("fps_overlay"))
+                .anchor(egui::Align2::LEFT_TOP, egui::vec2(6.0, 6.0))
+                .interactable(false)
+                .show(ctx, |ui| {
+                    // Fixed width (right-padded to 3 digits) and no wrapping so
+                    // the chip does not resize or re-wrap as the count changes.
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(format!("{fps:>3.0} fps"))
+                                .monospace()
+                                .color(egui::Color32::from_rgb(180, 200, 255))
+                                .background_color(egui::Color32::from_black_alpha(130)),
+                        )
+                        .wrap_mode(egui::TextWrapMode::Extend),
+                    );
+                });
         }
 
         let bg = self.style.bg;

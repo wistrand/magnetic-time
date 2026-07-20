@@ -33,6 +33,10 @@ All plan phases are built and owner-tuned; the plan was promoted to
 
 ## Commands
 
+A `Makefile` wraps the common ones (`make help` lists them: run, build,
+check, check-wasm, web, grad-check, dump, clean; fmt/clippy are deliberate).
+Pass flags with `make run ARGS="--face tide --fps"`. The raw commands:
+
 ```bash
 cargo run --release                 # interactive clock
 cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.png
@@ -45,6 +49,8 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --particles N --seed N --size PX --stroke-len F
                                     #   --palette ice|ember|emerald|violet|mono --bg RRGGBB
                                     #   --max-px N (interactive resolution cap, 0 = off)
+                                    #   --no-dev-panel (interactive: start with dev panel hidden)
+                                    #   --fps (interactive: show frame-rate overlay)
                                     #   --mobility F --max-speed F --noise F --repulsion F
                                     #   --face hands|seg|seg-hms|tide (hands, 7-seg digital, or concentric tide arcs)
                                     #   --seg-strength F (per-segment bar strength, seg faces)

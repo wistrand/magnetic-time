@@ -18,7 +18,7 @@ const ensureWasm = () => (wasmInit ??= init());
 // "strengths" and "shapes" are re-applied after it.
 const ATTRS = [
   "face", "seg-strength", "tide-strength", "magnets", "strengths", "shapes",
-  "particles", "speed", "stroke-len", "palette", "bg", "show-hands", "dev-panel",
+  "particles", "speed", "stroke-len", "palette", "bg", "show-hands", "fps", "dev-panel",
   "mobility", "max-speed", "noise", "repulsion",
   "chain-strength", "chain-spacing", "chain-range", "chain-compress", "drag",
   "pointer-strength", "pointer-radius", "pointer-visual", "max-px",
@@ -76,6 +76,10 @@ class MagneticClock extends HTMLElement {
       try {
         if (name === "show-hands") {
           h.set_show_hands(this.hasAttribute(name));
+          continue;
+        }
+        if (name === "fps") {
+          h.set_show_fps(this.hasAttribute(name));
           continue;
         }
         if (name === "dev-panel") {

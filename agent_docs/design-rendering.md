@@ -115,7 +115,10 @@ shared `bounds` table in `src/sim.rs`, not inline literals. A native-only
 preset row (path field + save/load) serializes the whole config to JSON via
 `src/preset.rs`; the CLI has `--preset` / `--save-preset` and the web handle
 `get_preset` / `set_preset` (exposed as `savePreset()` / `loadPreset()` on the
-`<magnetic-clock>` element). Native shows it by default; the web
-component hides it unless the `dev-panel` attribute is set. Tapping the
-12 o'clock tick toggles it anywhere (native and web); the pointer magnet is
-suppressed inside that hotspot so the tap does not stir the particles.
+`<magnetic-clock>` element). Native shows it by default (`--no-dev-panel`
+starts hidden); the web component hides it unless the `dev-panel` attribute is
+set. Tapping the 12 o'clock tick toggles it anywhere (native and web); the
+pointer magnet is suppressed inside that hotspot so the tap does not stir the
+particles. An optional FPS overlay (`Style::show_fps`, `--fps`, `fps`
+attribute, panel checkbox) draws the smoothed frame rate as an egui label in
+the top-left corner, independent of the panel.
