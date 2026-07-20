@@ -4,7 +4,7 @@
 BIN := target/release/magnetic-time
 ARGS ?=
 
-.PHONY: help run build check check-wasm web grad-check dump clean fmt clippy
+.PHONY: help run build check check-wasm web grad-check dump bench clean fmt clippy
 
 .DEFAULT_GOAL := help
 
@@ -32,6 +32,9 @@ grad-check: build ## verify the analytic field gradient, then exit
 dump: build ## headless sample render to docs/debug/out.png
 	@mkdir -p docs/debug
 	$(BIN) --headless --time 10:08:30 --sim-seconds 60 --size 800 --dump docs/debug/out.png
+
+bench: build ## headless perf benchmark (RUNS=N to change run count)
+	./scripts/bench.sh
 
 clean: ## remove build artifacts
 	cargo clean

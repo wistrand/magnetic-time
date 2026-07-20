@@ -27,14 +27,16 @@ All plan phases are built and owner-tuned; the plan was promoted to
 | `src/`        | application code                                    |
 | `agent_docs/` | architecture, design decisions, gotchas (below)     |
 | `docs/`       | GitHub Pages site (index.html, img/), committed     |
-| `scripts/`    | web build script; experiment analysis (numpy+PIL)   |
+| `scripts/`    | web build, perf benchmark (bench.sh), experiment analysis (numpy+PIL) |
 | `docs/app/`   | wasm build of the clock (pkg/ from build-web.sh)    |
 | `docs/debug/` | dumped debug bitmaps, disposable, gitignored        |
 
 ## Commands
 
 A `Makefile` wraps the common ones (`make help` lists them: run, build,
-check, check-wasm, web, grad-check, dump, clean; fmt/clippy are deliberate).
+check, check-wasm, web, grad-check, dump, bench, clean; fmt/clippy are
+deliberate). `make bench` runs `scripts/bench.sh` (headless perf on a few
+configs, min-of-N wall time; `RUNS=N` to change run count).
 Pass flags with `make run ARGS="--face tide --fps"`. The raw commands:
 
 ```bash
