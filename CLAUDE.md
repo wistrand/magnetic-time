@@ -36,7 +36,8 @@ All plan phases are built and owner-tuned; the plan was promoted to
 A `Makefile` wraps the common ones (`make help` lists them: run, build,
 check, check-wasm, web, grad-check, dump, bench, clean; fmt/clippy are
 deliberate). `make bench` runs `scripts/bench.sh` (headless perf on a few
-configs, min-of-N wall time; `RUNS=N` to change run count).
+configs: min-of-N wall time plus an approx fps = fixed-dt sim frames per
+wall-second; `RUNS=N` to change run count).
 Pass flags with `make run ARGS="--face tide --fps"`. The raw commands:
 
 ```bash
