@@ -89,6 +89,26 @@ impl WebHandle {
         *self.pending.borrow_mut() = Some(*self.config.borrow());
     }
 
+    /// Serialize the current configuration to a JSON preset string (for the
+    /// embedder to persist, e.g. in localStorage).
+    pub fn get_preset(&self) -> String {
+        let c = self.config.borrow();
+        crate::preset::to_json(&c.face, &c.sim, &c.style, c.speed)
+    }
+
+    /// Apply a JSON preset string over the current configuration.
+    pub fn set_preset(&self, json: &str) -> Result<(), JsValue> {
+        {
+            let mut c = self.config.borrow_mut();
+            let AppConfig {
+                face, sim, style, speed, ..
+            } = &mut *c;
+            crate::preset::apply_json(json, face, sim, style, speed).map_err(js_err)?;
+        }
+        self.push();
+        Ok(())
+    }
+
     /// Face mode: "hands" (default), "seg" (HH:MM), or "seg-hms" (HH:MM:SS).
     pub fn set_face(&self, v: &str) -> Result<(), JsValue> {
         let mut cfg = self.config.borrow_mut();

@@ -6,6 +6,7 @@ mod app;
 mod clock;
 mod field;
 mod hands;
+mod preset;
 mod render;
 mod sim;
 mod vec2;
@@ -45,6 +46,8 @@ struct Options {
     /// The active face and every face's configuration (hand layout, seg
     /// readout). One struct so faces stay self-contained; see field.rs.
     face: field::FaceConfigs,
+    /// Write the resolved configuration as a JSON preset and exit.
+    save_preset: Option<PathBuf>,
     /// Verify the analytic gradient against central differences and exit.
     grad_check: bool,
     /// Headless annealing: run the first `anneal_for` sim-seconds with
@@ -69,6 +72,7 @@ impl Default for Options {
             style: render::Style::default(),
             sim: sim::SimParams::default(),
             face: field::FaceConfigs::default(),
+            save_preset: None,
             grad_check: false,
             anneal_from: 0.0,
             anneal_for: 0.0,
@@ -98,6 +102,10 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--anneal-from F --anneal-for SECONDS]  headless: run the
                      first SECONDS at chain-strength F, then switch
                      [--grad-check]  verify analytic field gradient, then exit
+                     [--preset PATH]  load a JSON preset (before other flags to
+                     use as a base; later flags override)
+                     [--save-preset PATH]  write the resolved config as a JSON
+                     preset and exit
                      [--face hands|seg|seg-hms|tide]  hands (default), a digital
                      seven-segment readout (seg = HH:MM, seg-hms = HH:MM:SS),
                      or the tide arcs (concentric filling gauges)
@@ -249,6 +257,21 @@ fn parse_args() -> Result<Options, String> {
                 opts.sim.pointer_visual = value("--pointer-visual", &mut args)?
                     .parse()
                     .map_err(|e| format!("--pointer-visual: {e}"))?
+            }
+            "--preset" => {
+                let path = value("--preset", &mut args)?;
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("--preset {path}: {e}"))?;
+                preset::apply_json(
+                    &text,
+                    &mut opts.face,
+                    &mut opts.sim,
+                    &mut opts.style,
+                    &mut opts.speed,
+                )?;
+            }
+            "--save-preset" => {
+                opts.save_preset = Some(PathBuf::from(value("--save-preset", &mut args)?))
             }
             "--magnets" => {
                 opts.face.hands = field::parse_magnets(&value("--magnets", &mut args)?)?
@@ -446,6 +469,20 @@ fn main() -> ExitCode {
     if opts.grad_check {
         run_grad_check(&opts);
         return ExitCode::SUCCESS;
+    }
+
+    if let Some(path) = &opts.save_preset {
+        let json = preset::to_json(&opts.face, &opts.sim, &opts.style, opts.speed);
+        return match std::fs::write(path, json) {
+            Ok(()) => {
+                println!("wrote preset {}", path.display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{}: {e}", path.display());
+                ExitCode::FAILURE
+            }
+        };
     }
 
     if opts.headless {

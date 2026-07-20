@@ -244,6 +244,14 @@ what implementation teaches; correct entries that turn out wrong.
 
 ## Decision history
 
+- JSON presets (`src/preset.rs`) are hand-rolled flat JSON, not serde. The
+  project stays dependency-light (rayon, chrono, png), so a flat one-level
+  object (values are number/bool/string) keeps a ~50-line reader viable
+  without a derive crate. Apply is lenient by design: unknown keys ignored,
+  missing keys keep current values, numeric sim params clamped to `bounds`.
+  Do not "upgrade" to serde or nested JSON without owner sign-off; the flat
+  schema is also what makes hand-editing a preset safe. Round-trip
+  (save -> load -> save) is byte-identical; keep it that way.
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears
   fully every frame. Do not reintroduce trails as a "cheap improvement".
 - Chain textures: explicitly requested by the owner; simulated with real pair

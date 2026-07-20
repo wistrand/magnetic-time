@@ -50,6 +50,10 @@ pub struct ClockApp {
     fb: Framebuffer,
     texture: Option<egui::TextureHandle>,
     dump_status: Option<String>,
+    /// JSON preset file path edited in the dev panel, and the last save/load
+    /// result message.
+    preset_path: String,
+    preset_status: Option<String>,
 }
 
 impl ClockApp {
@@ -79,7 +83,28 @@ impl ClockApp {
             fb: Framebuffer::new(8, 8),
             texture: None,
             dump_status: None,
+            preset_path: "preset.json".to_string(),
+            preset_status: None,
         }
+    }
+
+    /// Apply a JSON preset string to the live configuration (dev panel load,
+    /// or any caller). Rebuilds the face and resizes particles if the count
+    /// changed.
+    fn apply_preset(&mut self, json: &str) -> Result<(), String> {
+        let old_count = self.sim.params.count;
+        crate::preset::apply_json(
+            json,
+            &mut self.face_cfg,
+            &mut self.sim.params,
+            &mut self.style,
+            &mut self.speed,
+        )?;
+        self.rebuild_face();
+        if self.sim.params.count != old_count {
+            self.sim.set_count(self.sim.params.count);
+        }
+        Ok(())
     }
 
     /// Rebuild the live face after its inputs (specs, mode, seg config)
@@ -164,6 +189,122 @@ impl ClockApp {
             });
     }
 
+    /// Per-hand magnet layout controls (hands face). Returns whether any
+    /// spec changed, so the caller can rebuild the face.
+    fn magnet_controls(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut changed = false;
+        for (i, name) in ["hour", "minute", "second"].iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(*name);
+                let spec = &mut self.face_cfg.hands[i];
+                egui::ComboBox::from_id_salt(("magnets", i))
+                    .selected_text(spec.label())
+                    .show_ui(ui, |ui| {
+                        for (kind, label) in [
+                            (MagnetKind::Tip, "tip"),
+                            (MagnetKind::Strip, "strip"),
+                            (MagnetKind::Alt, "alt"),
+                        ] {
+                            if ui
+                                .selectable_value(&mut spec.kind, kind, label)
+                                .changed()
+                            {
+                                changed = true;
+                            }
+                        }
+                    });
+                if spec.kind != MagnetKind::Tip {
+                    let mut n = spec.n.max(2);
+                    if ui
+                        .add(egui::DragValue::new(&mut n).range(2..=16))
+                        .changed()
+                    {
+                        changed = true;
+                    }
+                    spec.n = n;
+                }
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut spec.strength)
+                            .range(0.0..=8.0)
+                            .speed(0.05)
+                            .prefix("s "),
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                let spec = &mut self.face_cfg.hands[i];
+                ui.add_space(12.0);
+                let shape_name = match spec.shape {
+                    SpecShape::Point => "point",
+                    SpecShape::Disc { .. } => "disc",
+                    SpecShape::Rect { .. } => "rect",
+                };
+                egui::ComboBox::from_id_salt(("shape", i))
+                    .selected_text(shape_name)
+                    .show_ui(ui, |ui| {
+                        for (name, shape) in [
+                            ("point", SpecShape::Point),
+                            ("disc", SpecShape::Disc { radius: 0.04 }),
+                            (
+                                "rect",
+                                SpecShape::Rect {
+                                    len_frac: 1.0,
+                                    half_wid: 0.015,
+                                },
+                            ),
+                        ] {
+                            let selected = shape_name == name;
+                            if ui.selectable_label(selected, name).clicked() && !selected {
+                                spec.shape = shape;
+                                changed = true;
+                            }
+                        }
+                    });
+                match &mut spec.shape {
+                    SpecShape::Point => {}
+                    SpecShape::Disc { radius } => {
+                        if ui
+                            .add(
+                                egui::DragValue::new(radius)
+                                    .range(0.005..=0.3)
+                                    .speed(0.002)
+                                    .prefix("r "),
+                            )
+                            .changed()
+                        {
+                            changed = true;
+                        }
+                    }
+                    SpecShape::Rect { len_frac, half_wid } => {
+                        // Length is a fraction of the hand length
+                        // (1 = full hand, >1 overhangs the hub).
+                        for (v, prefix, max, speed) in [
+                            (len_frac, "l ", 2.0, 0.01),
+                            (half_wid, "w ", 0.3, 0.002),
+                        ] {
+                            if ui
+                                .add(
+                                    egui::DragValue::new(v)
+                                        .range(0.0..=max)
+                                        .speed(speed)
+                                        .prefix(prefix),
+                                )
+                                .changed()
+                            {
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        changed
+    }
+
     fn dev_panel_contents(&mut self, ui: &mut egui::Ui) {
         ui.heading("dev");
         ui.label(format!("time  {}", format_time(self.clock.now())));
@@ -227,125 +368,78 @@ impl ClockApp {
         let hands_mode = self.face_cfg.kind == FaceKind::Hands;
         let mut specs_changed = false;
         if hands_mode {
-            ui.label("magnets");
-        }
-        for (i, name) in ["hour", "minute", "second"].iter().enumerate() {
-            if !hands_mode {
-                break;
-            }
-            ui.horizontal(|ui| {
-                ui.label(*name);
-                let spec = &mut self.face_cfg.hands[i];
-                egui::ComboBox::from_id_salt(("magnets", i))
-                    .selected_text(spec.label())
-                    .show_ui(ui, |ui| {
-                        for (kind, label) in [
-                            (MagnetKind::Tip, "tip"),
-                            (MagnetKind::Strip, "strip"),
-                            (MagnetKind::Alt, "alt"),
-                        ] {
-                            if ui
-                                .selectable_value(&mut spec.kind, kind, label)
-                                .changed()
-                            {
-                                specs_changed = true;
-                            }
-                        }
-                    });
-                if spec.kind != MagnetKind::Tip {
-                    let mut n = spec.n.max(2);
-                    if ui
-                        .add(egui::DragValue::new(&mut n).range(2..=16))
-                        .changed()
-                    {
-                        specs_changed = true;
-                    }
-                    spec.n = n;
-                }
-                if ui
-                    .add(
-                        egui::DragValue::new(&mut spec.strength)
-                            .range(0.0..=8.0)
-                            .speed(0.05)
-                            .prefix("s "),
-                    )
-                    .changed()
-                {
-                    specs_changed = true;
-                }
-            });
-            ui.horizontal(|ui| {
-                let spec = &mut self.face_cfg.hands[i];
-                ui.add_space(12.0);
-                let shape_name = match spec.shape {
-                    SpecShape::Point => "point",
-                    SpecShape::Disc { .. } => "disc",
-                    SpecShape::Rect { .. } => "rect",
-                };
-                egui::ComboBox::from_id_salt(("shape", i))
-                    .selected_text(shape_name)
-                    .show_ui(ui, |ui| {
-                        for (name, shape) in [
-                            ("point", SpecShape::Point),
-                            ("disc", SpecShape::Disc { radius: 0.04 }),
-                            (
-                                "rect",
-                                SpecShape::Rect {
-                                    len_frac: 1.0,
-                                    half_wid: 0.015,
-                                },
-                            ),
-                        ] {
-                            let selected = shape_name == name;
-                            if ui.selectable_label(selected, name).clicked() && !selected {
-                                spec.shape = shape;
-                                specs_changed = true;
-                            }
-                        }
-                    });
-                match &mut spec.shape {
-                    SpecShape::Point => {}
-                    SpecShape::Disc { radius } => {
-                        if ui
-                            .add(
-                                egui::DragValue::new(radius)
-                                    .range(0.005..=0.3)
-                                    .speed(0.002)
-                                    .prefix("r "),
-                            )
-                            .changed()
-                        {
-                            specs_changed = true;
-                        }
-                    }
-                    SpecShape::Rect { len_frac, half_wid } => {
-                        // Length is a fraction of the hand length
-                        // (1 = full hand, >1 overhangs the hub).
-                        for (v, prefix, max, speed) in [
-                            (len_frac, "l ", 2.0, 0.01),
-                            (half_wid, "w ", 0.3, 0.002),
-                        ] {
-                            if ui
-                                .add(
-                                    egui::DragValue::new(v)
-                                        .range(0.0..=max)
-                                        .speed(speed)
-                                        .prefix(prefix),
-                                )
-                                .changed()
-                            {
-                                specs_changed = true;
-                            }
-                        }
-                    }
-                }
+            ui.collapsing("magnets", |ui| {
+                specs_changed = self.magnet_controls(ui);
             });
         }
         if specs_changed || face_changed {
             self.rebuild_face();
         }
         ui.separator();
-        ui.label("particles");
+        // Most-used controls near the top: particle count, reset, and the
+        // common look. Deeper physics is grouped into collapsibles below.
+        let mut count = self.sim.params.count;
+        if ui
+            .add(
+                egui::Slider::new(&mut count, 500..=50000)
+                    .logarithmic(true)
+                    .text("count"),
+            )
+            .changed()
+        {
+            self.sim.set_count(count);
+        }
+        if ui.button("reset particles").clicked() {
+            self.sim = Sim::new(self.sim.params);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ui.horizontal(|ui| {
+                ui.label("preset");
+                ui.add(egui::TextEdit::singleline(&mut self.preset_path).desired_width(96.0));
+                if ui.button("save").clicked() {
+                    let json = crate::preset::to_json(
+                        &self.face_cfg,
+                        &self.sim.params,
+                        &self.style,
+                        self.speed,
+                    );
+                    self.preset_status = Some(match std::fs::write(&self.preset_path, json) {
+                        Ok(()) => format!("saved {}", self.preset_path),
+                        Err(e) => format!("{}: {e}", self.preset_path),
+                    });
+                }
+                if ui.button("load").clicked() {
+                    self.preset_status = Some(match std::fs::read_to_string(&self.preset_path) {
+                        Ok(text) => match self.apply_preset(&text) {
+                            Ok(()) => format!("loaded {}", self.preset_path),
+                            Err(e) => e,
+                        },
+                        Err(e) => format!("{}: {e}", self.preset_path),
+                    });
+                }
+            });
+            if let Some(status) = &self.preset_status {
+                ui.label(status.clone());
+            }
+        }
+        ui.checkbox(&mut self.style.show_hands, "show hands/magnets");
+        ui.add(egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0).text("stroke length"));
+        ui.horizontal(|ui| {
+            ui.label("palette");
+            egui::ComboBox::from_id_salt("palette")
+                .selected_text(self.style.palette.name())
+                .show_ui(ui, |ui| {
+                    for p in crate::render::Palette::ALL {
+                        ui.selectable_value(&mut self.style.palette, p, p.name());
+                    }
+                });
+            ui.label("bg");
+            ui.color_edit_button_srgb(&mut self.style.bg);
+        });
+
+        ui.separator();
+        ui.label("physics");
         {
             let p = &mut self.sim.params;
             ui.add(
@@ -360,18 +454,24 @@ impl ClockApp {
             );
             ui.add(egui::Slider::new(&mut p.noise, crate::sim::bounds::NOISE.ui()).text("noise"));
             ui.add(
-                egui::Slider::new(&mut p.repulsion_strength, crate::sim::bounds::REPULSION_STRENGTH.ui())
-                    .text("repulsion"),
-            );
-            ui.add(
-                egui::Slider::new(&mut p.repulsion_radius, crate::sim::bounds::REPULSION_RADIUS.ui())
-                    .logarithmic(true)
-                    .text("repulsion radius"),
-            );
-            ui.add(
                 egui::Slider::new(&mut p.chain_strength, crate::sim::bounds::CHAIN_STRENGTH.ui())
                     .text("chain strength"),
             );
+            ui.add(
+                egui::Slider::new(
+                    &mut p.repulsion_strength,
+                    crate::sim::bounds::REPULSION_STRENGTH.ui(),
+                )
+                .text("repulsion"),
+            );
+            ui.add(
+                egui::Slider::new(&mut p.fluid_scale, crate::sim::bounds::FLUID_SCALE.ui())
+                    .logarithmic(true)
+                    .text("fluid scale"),
+            );
+        }
+        ui.collapsing("chain detail", |ui| {
+            let p = &mut self.sim.params;
             ui.add(
                 egui::Slider::new(&mut p.b_sat, crate::sim::bounds::B_SAT.ui())
                     .logarithmic(true)
@@ -403,6 +503,17 @@ impl ClockApp {
                     .logarithmic(true)
                     .text("chain neighbors"),
             );
+        });
+        ui.collapsing("field & fluid", |ui| {
+            let p = &mut self.sim.params;
+            ui.add(
+                egui::Slider::new(
+                    &mut p.repulsion_radius,
+                    crate::sim::bounds::REPULSION_RADIUS.ui(),
+                )
+                .logarithmic(true)
+                .text("repulsion radius"),
+            );
             ui.add(
                 egui::Slider::new(&mut p.dt, crate::sim::bounds::DT.ui())
                     .logarithmic(true)
@@ -414,17 +525,18 @@ impl ClockApp {
                     .text("field clamp"),
             );
             ui.add(
-                egui::Slider::new(&mut p.fluid_scale, crate::sim::bounds::FLUID_SCALE.ui())
-                    .logarithmic(true)
-                    .text("fluid scale"),
-            );
-            ui.add(
                 egui::Slider::new(&mut p.drag_coupling, crate::sim::bounds::DRAG_COUPLING.ui())
                     .text("drag coupling"),
             );
+        });
+        ui.collapsing("pointer / touch", |ui| {
+            let p = &mut self.sim.params;
             ui.add(
-                egui::Slider::new(&mut p.pointer_strength, crate::sim::bounds::POINTER_STRENGTH.ui())
-                    .text("pointer strength"),
+                egui::Slider::new(
+                    &mut p.pointer_strength,
+                    crate::sim::bounds::POINTER_STRENGTH.ui(),
+                )
+                .text("pointer strength"),
             );
             ui.add(
                 egui::Slider::new(&mut p.pointer_radius, crate::sim::bounds::POINTER_RADIUS.ui())
@@ -434,52 +546,23 @@ impl ClockApp {
                 egui::Slider::new(&mut p.pointer_visual, crate::sim::bounds::POINTER_VISUAL.ui())
                     .text("pointer visual"),
             );
-        }
-        ui.add(
-            egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0)
-                .text("stroke length"),
-        );
-        ui.add(
-            egui::Slider::new(&mut self.style.max_px, 0..=2048)
-                .text("res cap px (0 = off)"),
-        );
-        ui.checkbox(&mut self.style.show_hands, "show hands");
-        ui.horizontal(|ui| {
-            ui.label("background");
-            ui.color_edit_button_srgb(&mut self.style.bg);
         });
-        ui.horizontal(|ui| {
-            ui.label("palette");
-            egui::ComboBox::from_id_salt("palette")
-                .selected_text(self.style.palette.name())
-                .show_ui(ui, |ui| {
-                    for p in crate::render::Palette::ALL {
-                        ui.selectable_value(&mut self.style.palette, p, p.name());
-                    }
-                });
+        ui.collapsing("render", |ui| {
+            ui.add(
+                egui::Slider::new(&mut self.style.max_px, 0..=2048)
+                    .text("res cap px (0 = off)"),
+            );
         });
-        let mut count = self.sim.params.count;
-        if ui
-            .add(
-                egui::Slider::new(&mut count, 500..=50000)
-                    .logarithmic(true)
-                    .text("count"),
-            )
-            .changed()
-        {
-            self.sim.set_count(count);
-        }
-        if ui.button("reset particles").clicked() {
-            self.sim = Sim::new(self.sim.params);
-        }
+
         ui.separator();
-        ui.label("debug views");
-        ui.checkbox(&mut self.views.field, "field |B|");
-        ui.checkbox(&mut self.views.quiver, "force quiver");
-        ui.checkbox(&mut self.views.dipoles, "dipoles");
-        ui.checkbox(&mut self.views.velocity, "velocity color");
-        ui.checkbox(&mut self.views.hash, "hash occupancy");
-        ui.checkbox(&mut self.views.chains, "chain bonds");
+        ui.collapsing("debug views", |ui| {
+            ui.checkbox(&mut self.views.field, "field |B|");
+            ui.checkbox(&mut self.views.quiver, "force quiver");
+            ui.checkbox(&mut self.views.dipoles, "dipoles");
+            ui.checkbox(&mut self.views.velocity, "velocity color");
+            ui.checkbox(&mut self.views.hash, "hash occupancy");
+            ui.checkbox(&mut self.views.chains, "chain bonds");
+        });
         ui.separator();
         #[cfg(not(target_arch = "wasm32"))]
         if ui.button("dump frame").clicked() {

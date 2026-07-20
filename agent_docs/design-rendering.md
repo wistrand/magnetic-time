@@ -100,13 +100,22 @@ not exist headless; `--grad-check` verifies field math without rendering.
 
 ## Dev panel
 
-An egui side panel (vertical scroll for small windows) with sliders for every
-tunable, the time-speed multiplier, a face selector (hands / seg, with the
-seconds and per-segment strength controls in seg mode), magnet
-layout/shape/strength combos per hand (hands face only), palette and
-background pickers, debug view toggles, particle count (live), reset, and the
-dump button. Slider ranges come from the shared `bounds` table in
-`src/sim.rs`, not inline literals. Native shows it by default; the web
+An egui side panel (vertical scroll for small windows). Ordered most-used
+first: speed, the face selector (hands / seg / tide, with each face's own
+controls), a collapsible `magnets` section for the per-hand layout combos
+(hands mode), then particle count (live) and reset, the common look (show
+hands/magnets, stroke length, palette, background), then a short "physics"
+block of the most-touched knobs (mobility, max speed, noise, chain strength,
+repulsion, fluid scale). The rarely used tunables live in collapsing sections
+(`chain detail`, `field & fluid`, `pointer / touch`, `render`), and the debug
+view toggles in their own collapsing section, so the panel is short by
+default. The per-hand magnet loop is factored into `ClockApp::magnet_controls`
+so the collapsible wrapper stays a few lines. Slider ranges come from the
+shared `bounds` table in `src/sim.rs`, not inline literals. A native-only
+preset row (path field + save/load) serializes the whole config to JSON via
+`src/preset.rs`; the CLI has `--preset` / `--save-preset` and the web handle
+`get_preset` / `set_preset` (exposed as `savePreset()` / `loadPreset()` on the
+`<magnetic-clock>` element). Native shows it by default; the web
 component hides it unless the `dev-panel` attribute is set. Tapping the
 12 o'clock tick toggles it anywhere (native and web); the pointer magnet is
 suppressed inside that hotspot so the tap does not stir the particles.

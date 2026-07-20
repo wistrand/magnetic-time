@@ -41,6 +41,7 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   positions + local field (measurement scripts;
                                     #   image-based estimators fuse overlapping dots)
                                     # more flags: --view field,quiver,dipoles,velocity,hash,chains
+                                    #   --preset FILE.json (load), --save-preset FILE.json (dump config + exit)
                                     #   --particles N --seed N --size PX --stroke-len F
                                     #   --palette ice|ember|emerald|violet|mono --bg RRGGBB
                                     #   --max-px N (interactive resolution cap, 0 = off)

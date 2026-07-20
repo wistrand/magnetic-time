@@ -55,6 +55,17 @@ class MagneticClock extends HTMLElement {
     if (this.handle) this.applyAll();
   }
 
+  // Save the current configuration as a JSON preset string (or null before
+  // the clock has started). Persist it however you like, e.g. localStorage.
+  savePreset() {
+    return this.handle ? this.handle.get_preset() : null;
+  }
+
+  // Apply a JSON preset string previously produced by savePreset().
+  loadPreset(json) {
+    this.handle?.set_preset(json);
+  }
+
   applyAll() {
     const h = this.handle;
     const num = (name) => {

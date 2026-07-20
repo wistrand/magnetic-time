@@ -15,6 +15,7 @@ file after all phases landed; design rationale lives in
 | `src/hands.rs` | Hand lengths and angles; defines clock-face units (center origin, dial radius 1, y down) |
 | `src/field.rs` | Faces: `FaceConfigs` (the Copy config every carrier holds) builds a `Face` (rotating `HandMagnets`, the `SegClock` seven-segment readout, or the `TideClock` arcs); magnet layouts (`LayoutSpec`), field elements, analytic B and grad(|B|^2), string parsers shared by CLI and web attributes |
 | `src/sim.rs`   | `SimParams` tunables, overdamped particle stepper, spatial hash, chains, drag coupling  |
+| `src/preset.rs`| JSON presets: `to_json` / `apply_json` over `(FaceConfigs, SimParams, Style, speed)`, hand-rolled flat-JSON reader/writer (no serde), lenient apply |
 | `src/render.rs`| Software rasterizer, `Style`/`Palette`/`Theme`, debug overlays, PNG output              |
 | `src/app.rs`   | eframe app: pending-config channel, pointer magnet, dev panel, fixed-dt catch-up loop   |
 | `src/web.rs`   | wasm-only `WebHandle` (start/destroy + attribute setters) behind the web component      |
@@ -87,7 +88,9 @@ table (`SimParams::validate` errors, web/sliders clamp the same limits); and
 the `Face` abstraction adding a digital seven-segment readout (`--face seg`,
 with a disc seconds marker orbiting the HH:MM face) and the tide arcs
 (`--face tide`) alongside the hands, all carried by one grouped `FaceConfigs`
-so a new face is a field.rs-local change.
+so a new face is a field.rs-local change; and JSON presets (`src/preset.rs`,
+`--preset` / `--save-preset`, dev-panel save/load, web `get_preset` /
+`set_preset`) with a serde-free flat-JSON reader.
 
 ## Deferred / gated work
 
