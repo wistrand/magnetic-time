@@ -242,6 +242,29 @@ what implementation teaches; correct entries that turn out wrong.
   smoothed by the fixed grid plus the fade-in leading edge, verified by a
   flat field-heatmap frame-to-frame sweep (ratio ~1.0 away from the wrap).
 
+## Findings from the parallel rasterizer
+
+- The particle draw pass was the last serial hot path (the sim was already
+  rayon-parallel), and its cost scales with total stroke pixel area, so long
+  strokes tanked FPS. `draw_particles` now bands the buffer
+  (`par_chunks_mut`) and each band rasterizes particles clipped to its rows.
+  Byte-exactness holds ONLY because each pixel is in exactly one band and
+  particles run in index order per band, so the per-pixel blend order is
+  unchanged; if you ever bin particles differently or reorder them, re-verify
+  the byte-identical dump.
+- The per-row x-span optimization in `raster_capsule` MUST stay a superset of
+  covered pixels or output changes. It works because coverage needs distance
+  to the segment < hw, and distance to the segment >= distance to the line, so
+  every covered pixel is inside the infinite-line strip. Keep the per-pixel
+  `if f > 0.0` guard: it trims the few extra strip pixels that are not covered,
+  which is what makes the tightening exact rather than approximate. Do NOT
+  swap the sqrt falloff for a squared-distance form to save a sqrt: it changes
+  the anti-aliasing and breaks byte-exact dumps (left on the table
+  deliberately).
+- `rayon::current_num_threads()` returns 1 on wasm (sequential fallback), so
+  the same `par_chunks_mut` path serves both; no cfg split is needed (an
+  earlier version had one, removed as pointless).
+
 ## Decision history
 
 - JSON presets (`src/preset.rs`) are hand-rolled flat JSON, not serde. The

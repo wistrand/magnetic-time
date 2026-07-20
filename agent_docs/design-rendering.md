@@ -50,9 +50,27 @@ linearly. Headless `--size` is exact and uncapped.
   toward white or black. Debug overlays stay dark-tuned.
 - Never draw particles as per-particle egui shapes; the tessellator cannot
   handle tens of thousands of primitives per frame.
+- The particle pass is parallel: `draw_particles` splits the buffer into
+  horizontal bands (`par_chunks_mut`, ~3x cores) and each band rasterizes all
+  particles clipped to its rows. Each pixel belongs to exactly one band and
+  particles are walked in index order per band, so the read-modify-write
+  blends never race and the per-pixel blend order matches a serial pass;
+  output is byte-identical (verified against the pre-parallel baseline). rayon
+  falls back to one sequential pass on wasm. Cost was the render bottleneck
+  because it was serial while the sim used all cores.
+- Stroke cost scales with the stroke's pixel area, so long strokes are
+  expensive. The band rasterizer (`raster_capsule`) iterates only the per-row
+  x-span the stroke can cover (the infinite-line strip of half-width `hw`
+  sliced at each row), not the full AABB, skipping the corners a diagonal
+  stroke never touches. This is a strict superset of covered pixels (distance
+  to the segment >= distance to the line), so it stays byte-identical. The
+  `Framebuffer::capsule_ink` method keeps the old full-AABB scan for the
+  chains debug view.
 
-Upgrade path if CPU rasterization becomes the bottleneck: eframe's wgpu
-backend supports `PaintCallback` for GPU point/stroke sprites. Do not start
+Further upgrade path if CPU rasterization is still the bottleneck: eframe's
+wgpu backend supports `PaintCallback` for GPU point/stroke sprites, which
+would make stroke length nearly free but breaks the shared-rasterizer
+invariant (GPU rounding differs from the CPU headless path). Do not start
 there.
 
 ## Debug views

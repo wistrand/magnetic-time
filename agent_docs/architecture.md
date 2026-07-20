@@ -35,9 +35,10 @@ file after all phases landed; design rationale lives in
    particle, pass 2 sums neighbor forces on the spatial hash, optional pass
    2.5 smooths velocities (drag coupling), pass 3 integrates.
 3. `draw_clock` rasterizes face, magnets, particles, and overlays into one
-   RGBA buffer (capped by `Style::max_px`), uploaded as an egui texture.
-   Headless mode runs the same loop without a window and writes the buffer to
-   PNG.
+   RGBA buffer (capped by `Style::max_px`), uploaded as an egui texture. The
+   particle pass is rayon-parallel over horizontal bands (byte-exact vs a
+   serial pass). Headless mode runs the same loop without a window and writes
+   the buffer to PNG.
 
 ## Verification methodology
 
@@ -90,7 +91,11 @@ with a disc seconds marker orbiting the HH:MM face) and the tide arcs
 (`--face tide`) alongside the hands, all carried by one grouped `FaceConfigs`
 so a new face is a field.rs-local change; and JSON presets (`src/preset.rs`,
 `--preset` / `--save-preset`, dev-panel save/load, web `get_preset` /
-`set_preset`) with a serde-free flat-JSON reader.
+`set_preset`) with a serde-free flat-JSON reader; a `--no-dev-panel` flag and
+an optional FPS overlay (`--fps`); a `Makefile` for the common tasks; and a
+parallel (banded) particle rasterizer with a tighter per-row capsule scan
+that removed the last serial hot path (byte-exact, ~2.5-3.5x on the render
+pass).
 
 ## Deferred / gated work
 

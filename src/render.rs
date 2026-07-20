@@ -7,6 +7,8 @@ use std::io::BufWriter;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
+use rayon::prelude::*;
+
 use crate::field::{Face, FieldSources, MagnetShape};
 use crate::hands;
 use crate::sim::Sim;
@@ -328,23 +330,6 @@ impl Framebuffer {
         self.pixels[i + 3] = 255;
     }
 
-    /// Soft particle dot: intensity `gain` at the center falling to 0 at
-    /// radius r, blended with the ink mode (additive on dark, subtractive on
-    /// light). Overlapping dots saturate instead of clipping.
-    pub fn dot_ink(&mut self, cx: f64, cy: f64, r: f64, color: [u8; 3], gain: f32, dark: bool) {
-        let xa = ((cx - r).floor() as i32).max(0);
-        let ya = ((cy - r).floor() as i32).max(0);
-        let xb = ((cx + r).ceil() as i32).min(self.width as i32 - 1);
-        let yb = ((cy + r).ceil() as i32).min(self.height as i32 - 1);
-        for y in ya..=yb {
-            for x in xa..=xb {
-                let d = ((x as f64 + 0.5 - cx).powi(2) + (y as f64 + 0.5 - cy).powi(2)).sqrt();
-                let f = ((1.0 - d / r).max(0.0)) as f32 * gain;
-                self.blend_ink(x, y, color, f, dark);
-            }
-        }
-    }
-
     /// Soft particle stroke: a capsule with intensity `gain` on the axis
     /// falling to 0 at half-width `hw`, blended with the ink mode.
     #[allow(clippy::too_many_arguments)]
@@ -640,40 +625,181 @@ fn draw_quiver(fb: &mut Framebuffer, m: &Map, sources: &FieldSources) {
     }
 }
 
-fn draw_particles(
-    fb: &mut Framebuffer,
-    m: &Map,
-    sim: &Sim,
-    views: DebugViews,
-    style: Style,
+/// Blend one pixel of a band slice; mirrors `Framebuffer::blend_ink` exactly
+/// (additive glow on dark, subtractive ink on light). `i` is the byte offset
+/// into the band. Caller guarantees `i` in bounds and `f > 0`.
+#[inline]
+fn blend_px(band: &mut [u8], i: usize, color: [u8; 3], f: f32, dark: bool) {
+    let fm = f.min(1.0);
+    if dark {
+        for c in 0..3 {
+            let v = band[i + c] as f32 + color[c] as f32 * fm;
+            band[i + c] = v.min(255.0) as u8;
+        }
+    } else {
+        for c in 0..3 {
+            let v = band[i + c] as f32 - (255.0 - color[c] as f32) * fm;
+            band[i + c] = v.max(0.0) as u8;
+        }
+    }
+    band[i + 3] = 255;
+}
+
+/// Rasterize a soft particle dot into one band (rows `[y0, y1)`), clipped to
+/// it: intensity `gain` at the center falling linearly to 0 at radius `r`.
+#[allow(clippy::too_many_arguments)]
+fn raster_dot(
+    band: &mut [u8],
+    width: usize,
+    y0: usize,
+    y1: usize,
+    cx: f64,
+    cy: f64,
+    r: f64,
+    color: [u8; 3],
+    gain: f32,
     dark: bool,
 ) {
+    let xa = ((cx - r).floor() as i64).max(0);
+    let xb = ((cx + r).ceil() as i64).min(width as i64 - 1);
+    let ya = ((cy - r).floor() as i64).max(y0 as i64);
+    let yb = ((cy + r).ceil() as i64).min(y1 as i64 - 1);
+    if xa > xb || ya > yb {
+        return;
+    }
+    for y in ya..=yb {
+        let yc = y as f64 + 0.5;
+        let row = (y as usize - y0) * width;
+        for x in xa..=xb {
+            let d = ((x as f64 + 0.5 - cx).powi(2) + (yc - cy).powi(2)).sqrt();
+            let f = ((1.0 - d / r).max(0.0)) as f32 * gain;
+            if f > 0.0 {
+                blend_px(band, (row + x as usize) * 4, color, f, dark);
+            }
+        }
+    }
+}
+
+/// Rasterize a capsule (stroke) into one band. Same coverage as
+/// `Framebuffer::capsule_ink`, but each row iterates only the x-span the
+/// stroke can cover instead of the full AABB. The span is the infinite-line
+/// strip of half-width `hw` sliced at this row: since coverage needs distance
+/// to the SEGMENT < hw and that is >= distance to the LINE, every covered
+/// pixel lies in the strip, so the output is identical (the AABB corners a
+/// diagonal stroke never reaches are skipped).
+#[allow(clippy::too_many_arguments)]
+fn raster_capsule(
+    band: &mut [u8],
+    width: usize,
+    y0: usize,
+    y1: usize,
+    ax: f64,
+    ay: f64,
+    bx: f64,
+    by: f64,
+    hw: f64,
+    color: [u8; 3],
+    gain: f32,
+    dark: bool,
+) {
+    let pad = hw + 1.0;
+    let xa = ((ax.min(bx) - pad).floor() as i64).max(0);
+    let xb = ((ax.max(bx) + pad).ceil() as i64).min(width as i64 - 1);
+    let ya = ((ay.min(by) - pad).floor() as i64).max(y0 as i64);
+    let yb = ((ay.max(by) + pad).ceil() as i64).min(y1 as i64 - 1);
+    if xa > xb || ya > yb {
+        return;
+    }
+    let (dx, dy) = (bx - ax, by - ay);
+    let len2 = (dx * dx + dy * dy).max(1e-12);
+    let len = len2.sqrt();
+    for y in ya..=yb {
+        let yc = y as f64 + 0.5;
+        let (mut xs, mut xe) = (xa, xb);
+        if dy.abs() > 1e-9 {
+            let center = ax + (yc - ay) * dx / dy;
+            let half = hw * len / dy.abs();
+            xs = xs.max((center - half).floor() as i64);
+            xe = xe.min((center + half).ceil() as i64);
+        }
+        if xs > xe {
+            continue;
+        }
+        let row = (y as usize - y0) * width;
+        for x in xs..=xe {
+            let (fx, fy) = (x as f64 + 0.5, yc);
+            let t = (((fx - ax) * dx + (fy - ay) * dy) / len2).clamp(0.0, 1.0);
+            let d = ((fx - ax - t * dx).powi(2) + (fy - ay - t * dy).powi(2)).sqrt();
+            let f = ((1.0 - d / hw).max(0.0)) as f32 * gain;
+            if f > 0.0 {
+                blend_px(band, (row + x as usize) * 4, color, f, dark);
+            }
+        }
+    }
+}
+
+fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, style: Style, dark: bool) {
+    let (w, h) = (fb.width as usize, fb.height as usize);
+    if w == 0 || h == 0 {
+        return;
+    }
     let pr = (m.r * 0.006).max(1.3);
     let max_speed = sim.params.max_speed;
     let base = style.palette.base();
     let hot = style.palette.hot(dark);
-    for i in 0..sim.pos.len() {
-        let (x, y) = m.px(sim.pos[i]);
-        if views.velocity {
-            let t = (sim.vel[i].len() / max_speed).min(1.0) as f32;
-            let c = heat_color(t);
-            fb.dot_ink(x, y, pr, [c[0], c[1], c[2]], 0.9, dark);
-            continue;
+    let stroke_len = style.stroke_len;
+    let velocity = views.velocity;
+    let (pos, field, vel) = (&sim.pos, &sim.field, &sim.vel);
+
+    // Rasterize into horizontal bands. Each band owns disjoint rows, so the
+    // read-modify-write blends never race; iterating particles in index order
+    // per band keeps the per-pixel blend order identical to a serial pass, so
+    // dumps stay byte-exact. rayon fans the bands across cores on native and
+    // falls back to one sequential pass on wasm (no threads there), so one
+    // path serves both.
+    let bands = (rayon::current_num_threads() * 3).clamp(1, h);
+    let band_rows = h.div_ceil(bands);
+    let chunk = band_rows * w * 4;
+
+    let render_band = |bi: usize, band: &mut [u8]| {
+        let y0 = bi * band_rows;
+        let y1 = (y0 + band_rows).min(h);
+        for i in 0..pos.len() {
+            let (cx, cy) = m.px(pos[i]);
+            if velocity {
+                let t = (vel[i].len() / max_speed).min(1.0) as f32;
+                let c = heat_color(t);
+                raster_dot(band, w, y0, y1, cx, cy, pr, [c[0], c[1], c[2]], 0.9, dark);
+                continue;
+            }
+            let wv = field[i].w_disp as f32;
+            if wv > 0.15 && stroke_len > 0.0 {
+                let hl = pr * (1.2 + 2.6 * wv as f64) * stroke_len;
+                let d = field[i].dir;
+                let (dx, dy) = (d.x * hl, d.y * hl);
+                let hw = pr * 0.6;
+                // Cull against this band before the colour lerp.
+                let ymin = (cy - dy.abs() - hw - 1.0) as i64;
+                let ymax = (cy + dy.abs() + hw + 1.0) as i64;
+                if ymax < y0 as i64 || ymin >= y1 as i64 {
+                    continue;
+                }
+                let c = [0, 1, 2]
+                    .map(|k| (base[k] as f32 + (hot[k] as f32 - base[k] as f32) * wv) as u8);
+                raster_capsule(
+                    band, w, y0, y1, cx - dx, cy - dy, cx + dx, cy + dy, hw, c,
+                    0.4 + 0.35 * wv, dark,
+                );
+            } else {
+                raster_dot(band, w, y0, y1, cx, cy, pr, base, 0.55, dark);
+            }
         }
-        let w = sim.field[i].w_disp as f32;
-        if w > 0.15 && style.stroke_len > 0.0 {
-            // Magnetized: a short stroke along the local field. Aligned
-            // neighbors visually fuse into chains / spike-like filaments.
-            let c = [0, 1, 2]
-                .map(|k| (base[k] as f32 + (hot[k] as f32 - base[k] as f32) * w) as u8);
-            let hl = pr * (1.2 + 2.6 * w as f64) * style.stroke_len;
-            let d = sim.field[i].dir;
-            let (dx, dy) = (d.x * hl, d.y * hl);
-            fb.capsule_ink(x - dx, y - dy, x + dx, y + dy, pr * 0.6, c, 0.4 + 0.35 * w, dark);
-        } else {
-            fb.dot_ink(x, y, pr, base, 0.55, dark);
-        }
-    }
+    };
+
+    fb.pixels
+        .par_chunks_mut(chunk)
+        .enumerate()
+        .for_each(|(bi, band)| render_band(bi, band));
 }
 
 /// Spatial-hash occupancy: brighter cell = more particles.
