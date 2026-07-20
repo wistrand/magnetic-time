@@ -270,10 +270,15 @@ what implementation teaches; correct entries that turn out wrong.
 - The sim is bandwidth-bound: per-particle state was 144 B (`Vec2` f64 pos +
   48 B `FieldSample`), ~3.9 MB at 27k, which blows the Pi 5's 2 MB L2, and the
   neighbor pass gathers scattered `pos[j]`/`field[j]`. So particle state moved
-  to f32 (`Vec2f`, f32 `w`/`w_disp`), halving what the gather touches. This is
-  the win on a cache-starved target; on a desktop with ample cache it is
-  ~neutral (measured: small mixed deltas), as expected. Measure the real gain
-  with `make bench` on the actual Pi.
+  to f32 (`Vec2f`, f32 `w`/`w_disp`), halving what the gather touches (144 ->
+  ~72 B/particle, ~3.9 -> ~1.9 MB at 27k). Measured (`make bench`, min of 3):
+  on a 16-core desktop it is ~neutral (ample cache), but on the Raspberry Pi 5
+  (the cache-starved target) f32 vs f64 gained 1.2-1.6x, biggest where
+  particle state dominates: dense 50k 18 -> 28 fps (1.57x), default 27k
+  67 -> 85 (1.27x), render 69 -> 86 (1.25x), fine-dt 303 -> 366 (1.21x). tide
+  gained least, 13 -> 14 fps (1.06x), because its bottleneck is the (still f64)
+  field pass -- many magnet elements -- not particle bandwidth. The win tracks
+  the hypothesis exactly: it lands where the neighbor gather is the cost.
 - KEEP AoS, do not go struct-of-arrays. Splitting `Vec2` into separate `x[]`
   and `y[]` arrays would make each scattered neighbor gather touch two cache
   lines instead of one; f32-AoS (8 bytes, one read) is the sweet spot. The
