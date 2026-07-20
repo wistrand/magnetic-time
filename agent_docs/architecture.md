@@ -95,7 +95,9 @@ so a new face is a field.rs-local change; and JSON presets (`src/preset.rs`,
 an optional FPS overlay (`--fps`); a `Makefile` for the common tasks; and a
 parallel (banded) particle rasterizer with a tighter per-row capsule scan
 that removed the last serial hot path (byte-exact, ~2.5-3.5x on the render
-pass).
+pass); and an f32 hybrid for the particle state (halving the memory the
+neighbor pass gathers, for the bandwidth-bound Pi target; field pass stays
+f64).
 
 ## Deferred / gated work
 
@@ -103,9 +105,12 @@ pass).
   rasterization via eframe's wgpu `PaintCallback`, not a compute-shader sim;
   the sim is neighbor-bound at current presets (profiling finding in
   [gotchas.md](gotchas.md)), so GPU field math would buy little.
-- f32 + struct-of-arrays hot path: parked until a low-power target (e.g.
-  Raspberry Pi) exists to measure on. The analytic gradient already removed
-  the f32 cancellation hazard.
+- f32 particle state: BUILT (hybrid). `Vec2f`/f32 per-particle arrays and
+  hot loops (neighbor/drag/integrate); the field pass stays f64 (`Vec2`,
+  queried per particle) for near-source accuracy. Struct-of-arrays was
+  REJECTED: the neighbor pass gathers scattered neighbors, so f32-AoS (one
+  8-byte read per gather) beats splitting x/y into two arrays (two cache
+  lines). See gotchas.md.
 - Stirring advection (hands dragging bulk fluid): superseded in practice by
   drag coupling; revisit only if fluid-memory wakes are wanted.
 - Real threads on wasm (wasm-bindgen-rayon + COOP/COEP): not worth it at

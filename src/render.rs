@@ -765,17 +765,17 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
         let y0 = bi * band_rows;
         let y1 = (y0 + band_rows).min(h);
         for i in 0..pos.len() {
-            let (cx, cy) = m.px(pos[i]);
+            let (cx, cy) = m.px(pos[i].to_f64());
             if velocity {
-                let t = (vel[i].len() / max_speed).min(1.0) as f32;
+                let t = (vel[i].to_f64().len() / max_speed).min(1.0) as f32;
                 let c = heat_color(t);
                 raster_dot(band, w, y0, y1, cx, cy, pr, [c[0], c[1], c[2]], 0.9, dark);
                 continue;
             }
-            let wv = field[i].w_disp as f32;
+            let wv = field[i].w_disp;
             if wv > 0.15 && stroke_len > 0.0 {
                 let hl = pr * (1.2 + 2.6 * wv as f64) * stroke_len;
-                let d = field[i].dir;
+                let d = field[i].dir.to_f64();
                 let (dx, dy) = (d.x * hl, d.y * hl);
                 let hw = pr * 0.6;
                 // Cull against this band before the colour lerp.

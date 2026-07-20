@@ -90,6 +90,13 @@ planned optimization is to precompute each hand's field on a grid in the
 hand's local frame once at startup (the layout is rigid), then
 rotate-and-sample per particle.
 
+Because the neighbor pass is bandwidth-bound (it gathers scattered
+neighbors), per-particle state is f32 (`Vec2f`; positions, velocities,
+`FieldSample`), halving what the gather touches. The field pass alone stays
+f64 (`Vec2`, `b_and_grad_b2`): it is queried per particle in f64 for
+near-source accuracy and the result narrowed to f32. See the f32-hybrid notes
+in [gotchas.md](gotchas.md).
+
 ## Drag is the aesthetic core
 
 The mobility-to-hand-speed ratio decides the character of each hand:

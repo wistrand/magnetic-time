@@ -5,7 +5,7 @@
 use rayon::prelude::*;
 
 use crate::field::FieldSources;
-use crate::vec2::Vec2;
+use crate::vec2::{Vec2, Vec2f};
 
 const TAU: f64 = std::f64::consts::TAU;
 
@@ -94,7 +94,7 @@ pub struct SimParams {
 
 /// Per-step low-pass factor for the display weight `w_disp`; press/release
 /// fades over roughly 5 steps (~1/6 display-second) instead of flashing.
-const W_DISP_SMOOTH: f64 = 0.2;
+const W_DISP_SMOOTH: f32 = 0.2;
 
 // Defaults are the owner-tuned "rings" preset from 2026-07-14
 // (screenshot-approved, full-length bar magnets); change only with the owner.
@@ -301,13 +301,14 @@ impl SpatialHash {
         }
     }
 
-    fn cell_of(&self, p: Vec2) -> (i32, i32) {
-        let gx = (((p.x + 1.0) / self.cell) as i32).clamp(0, self.dims - 1);
-        let gy = (((p.y + 1.0) / self.cell) as i32).clamp(0, self.dims - 1);
+    fn cell_of(&self, p: Vec2f) -> (i32, i32) {
+        // Bin in f64 so the cell index is stable; positions are f32.
+        let gx = (((p.x as f64 + 1.0) / self.cell) as i32).clamp(0, self.dims - 1);
+        let gy = (((p.y as f64 + 1.0) / self.cell) as i32).clamp(0, self.dims - 1);
         (gx, gy)
     }
 
-    fn build(&mut self, pos: &[Vec2]) {
+    fn build(&mut self, pos: &[Vec2f]) {
         self.heads.fill(-1);
         self.next.resize(pos.len(), -1);
         for (i, p) in pos.iter().enumerate() {
@@ -324,7 +325,7 @@ impl SpatialHash {
     /// (the chain pair force) then keep the closest neighbors instead of a
     /// scan-order-biased subset. A raster-order scan here caused capped
     /// runs to drift bands toward the upper left (owner-reported bug).
-    fn for_near(&self, p: Vec2, k: i32, mut f: impl FnMut(usize)) {
+    fn for_near(&self, p: Vec2f, k: i32, mut f: impl FnMut(usize)) {
         let (cx, cy) = self.cell_of(p);
         for ring in 0..=k {
             for gy in (cy - ring).max(0)..=(cy + ring).min(self.dims - 1) {
@@ -366,23 +367,25 @@ impl SpatialHash {
 #[derive(Clone, Copy, Default)]
 pub struct FieldSample {
     /// Induced moment direction (unit local B), for chaining and strokes.
-    pub dir: Vec2,
+    /// f32: the field is queried in f64 but stored/consumed in f32 (see
+    /// vec2.rs; the neighbor pass gathers this per interaction).
+    pub dir: Vec2f,
     /// Moment saturation weight 0..=1 (|B|/b_sat capped); scales chaining.
-    pub w: f64,
+    pub w: f32,
     /// Low-passed copy of `w` for rendering, so pointer press/release fades
     /// instead of flashing. Physics uses the instant `w`.
-    pub w_disp: f64,
+    pub w_disp: f32,
     /// Speed-capped magnetic velocity term.
-    fv: Vec2,
+    fv: Vec2f,
 }
 
 pub struct Sim {
     pub params: SimParams,
-    pub pos: Vec<Vec2>,
+    pub pos: Vec<Vec2f>,
     /// Last step's velocities, kept for the velocity debug view.
-    pub vel: Vec<Vec2>,
+    pub vel: Vec<Vec2f>,
     /// Scratch buffer for the drag-coupling velocity smoothing pass.
-    vel_smooth: Vec<Vec2>,
+    vel_smooth: Vec<Vec2f>,
     /// Per-particle field samples from the last step.
     pub field: Vec<FieldSample>,
     /// Scratch for pass 1 so the previous step's `w_disp` stays readable
@@ -403,11 +406,11 @@ impl Sim {
         for _ in 0..params.count {
             let a = rng.f64() * TAU;
             let r = rng.f64().sqrt() * DISH_R;
-            pos.push(Vec2::new(a.cos() * r, a.sin() * r));
+            pos.push(Vec2::new(a.cos() * r, a.sin() * r).to_f32());
         }
         Self {
-            vel: vec![Vec2::ZERO; params.count],
-            vel_smooth: vec![Vec2::ZERO; params.count],
+            vel: vec![Vec2f::ZERO; params.count],
+            vel_smooth: vec![Vec2f::ZERO; params.count],
             field: vec![FieldSample::default(); params.count],
             field_scratch: vec![FieldSample::default(); params.count],
             step_index: 0,
@@ -435,9 +438,9 @@ impl Sim {
             while self.pos.len() < n {
                 let a = self.rng.f64() * TAU;
                 let r = self.rng.f64().sqrt() * DISH_R;
-                self.pos.push(Vec2::new(a.cos() * r, a.sin() * r));
-                self.vel.push(Vec2::ZERO);
-                self.vel_smooth.push(Vec2::ZERO);
+                self.pos.push(Vec2::new(a.cos() * r, a.sin() * r).to_f32());
+                self.vel.push(Vec2f::ZERO);
+                self.vel_smooth.push(Vec2f::ZERO);
                 self.field.push(FieldSample::default());
                 self.field_scratch.push(FieldSample::default());
             }
@@ -493,6 +496,25 @@ impl Sim {
         self.hash.build(&self.pos);
         let k_cells = ((range / cell).ceil() as i32).clamp(1, 4);
 
+        // f32 copies of the constants the particle-space passes (2, 2.5, 3)
+        // use, so the hot loop is pure f32 (particle state is f32; the field
+        // pass below stays f64). See vec2.rs.
+        let r_rep32 = r_rep as f32;
+        let range32 = range as f32;
+        let chain_range32 = p.chain_range as f32;
+        let chain_spacing32 = p.chain_spacing as f32;
+        let chain_compress32 = p.chain_compress as f32;
+        let chain_strength32 = p.chain_strength as f32;
+        let repulsion_strength32 = p.repulsion_strength as f32;
+        let chain_speed_cap32 = p.chain_speed_cap as f32;
+        let noise32 = p.noise as f32;
+        let drag_coupling32 = p.drag_coupling as f32;
+        let cone_t32 = cone_t as f32;
+        let dish_r32 = DISH_R as f32;
+        let wall_k32 = WALL_K as f32;
+        let tau32 = TAU as f32;
+        let dt32 = p.dt as f32;
+
         // Pass 1: field samples. One analytic sweep gives B (for the induced
         // moment: superparamagnetic beads align with the local field,
         // saturating at b_sat) and grad(|B|^2) for the magnetic pull,
@@ -501,6 +523,9 @@ impl Sim {
         self.pos
             .par_iter()
             .map(|&pos| {
+                // Query the field in f64 (accurate near sources; not the hot
+                // pass), then narrow the per-particle result to f32.
+                let pos = pos.to_f64();
                 let (b, g) = sources.b_and_grad_b2(pos);
                 let mut fv = g * p.mobility;
                 let sp = fv.len();
@@ -512,12 +537,12 @@ impl Sim {
                 // it would saturate w and reorient every stroke dish-wide.
                 let b = b - sources.pointer_b(pos) * (1.0 - p.pointer_visual);
                 let bl = b.len();
-                let w = (bl / p.b_sat).min(1.0);
+                let w = (bl / p.b_sat).min(1.0) as f32;
                 FieldSample {
-                    dir: if bl > 1e-12 { b / bl } else { Vec2::ZERO },
+                    dir: if bl > 1e-12 { (b / bl).to_f32() } else { Vec2f::ZERO },
                     w,
                     w_disp: w,
-                    fv,
+                    fv: fv.to_f32(),
                 }
             })
             .collect_into_vec(&mut self.field_scratch);
@@ -539,7 +564,7 @@ impl Sim {
         // preset.
         self.vel.par_iter_mut().enumerate().for_each_init(
             || Vec::with_capacity(64),
-            |cand: &mut Vec<(usize, f64)>, (i, vel)| {
+            |cand: &mut Vec<(usize, f32)>, (i, vel)| {
             let pos = positions[i];
             let mut v = field[i].fv;
 
@@ -552,7 +577,7 @@ impl Sim {
             // bands toward the scan direction (owner-found at high
             // fluid_scale, where the cap binds constantly).
             let (mi, wi) = (field[i].dir, field[i].w);
-            let mut rep = Vec2::ZERO;
+            let mut rep = Vec2f::ZERO;
             cand.clear();
             hash.for_near(pos, k_cells, |j| {
                 if j == i {
@@ -560,13 +585,13 @@ impl Sim {
                 }
                 let d = pos - positions[j];
                 let dist = d.len();
-                if dist <= 1e-9 || dist >= range {
+                if dist <= 1e-9 || dist >= range32 {
                     return;
                 }
-                if dist < r_rep {
-                    rep += (d / dist) * (1.0 - dist / r_rep);
+                if dist < r_rep32 {
+                    rep += (d / dist) * (1.0 - dist / r_rep32);
                 }
-                if chains && dist < p.chain_range {
+                if chains && dist < chain_range32 {
                     cand.push((j, dist));
                 }
             });
@@ -575,7 +600,7 @@ impl Sim {
                 cand.select_nth_unstable_by(cap, |a, b| a.1.total_cmp(&b.1));
                 cand.truncate(cap);
             }
-            let mut chain_v = Vec2::ZERO;
+            let mut chain_v = Vec2f::ZERO;
             for &(j, dist) in cand.iter() {
                 let w = wi * field[j].w;
                 if w < 1e-3 {
@@ -583,7 +608,7 @@ impl Sim {
                 }
                 // Attraction floor: bead spacing, tightened for strongly
                 // magnetized pairs (field-dependent chain compression).
-                let floor = p.chain_spacing * (1.0 - p.chain_compress * w);
+                let floor = chain_spacing32 * (1.0 - chain_compress32 * w);
                 if dist < floor {
                     continue;
                 }
@@ -601,33 +626,33 @@ impl Sim {
                 // the 20-54.7 deg attraction annulus and bonds evaporate by
                 // rotational diffusion (measured 2026-07-15: aggregates
                 // disintegrate to single beads). Repulsion is never gated.
-                if cone_t > 0.0
-                    && dist > 1.5 * p.chain_spacing
+                if cone_t32 > 0.0
+                    && dist > 1.5 * chain_spacing32
                     && bracket.dot(rh) < 0.0
-                    && (mir * mir < cone_t || mjr * mjr < cone_t)
+                    && (mir * mir < cone_t32 || mjr * mjr < cone_t32)
                 {
                     continue;
                 }
-                let fall = (r_rep / dist).powi(4);
-                chain_v += bracket * (p.chain_strength * w * fall);
+                let fall = (r_rep32 / dist).powi(4);
+                chain_v += bracket * (chain_strength32 * w * fall);
             }
-            v += rep * p.repulsion_strength;
+            v += rep * repulsion_strength32;
             let cl = chain_v.len();
-            if cl > p.chain_speed_cap {
-                chain_v = chain_v * (p.chain_speed_cap / cl);
+            if cl > chain_speed_cap32 {
+                chain_v = chain_v * (chain_speed_cap32 / cl);
             }
             v += chain_v;
 
             // Dish wall.
             let rad = pos.len();
-            if rad > DISH_R {
-                v += pos.normalized() * (-(rad - DISH_R) * WALL_K);
+            if rad > dish_r32 {
+                v += pos.normalized() * (-(rad - dish_r32) * wall_k32);
             }
 
             // Brownian jitter from a stateless per-particle stream.
             let mut rng = Rng::new(noise_base ^ (i as u64).wrapping_mul(0xA24BAED4963EE407));
-            let a = rng.f64() * TAU;
-            v += Vec2::new(a.cos(), a.sin()) * p.noise;
+            let a = rng.f64() as f32 * tau32;
+            v += Vec2f::new(a.cos(), a.sin()) * noise32;
 
             *vel = v;
         });
@@ -643,21 +668,21 @@ impl Sim {
                 .for_each(|(i, out)| {
                     let pos = positions[i];
                     let vi = vel[i];
-                    let mut sum = Vec2::ZERO;
-                    let mut wsum = 0.0;
+                    let mut sum = Vec2f::ZERO;
+                    let mut wsum = 0.0f32;
                     hash.for_near(pos, k_cells, |j| {
                         if j == i {
                             return;
                         }
                         let dist = (pos - positions[j]).len();
-                        if dist < range {
-                            let w = 1.0 - dist / range;
+                        if dist < range32 {
+                            let w = 1.0 - dist / range32;
                             sum += (vel[j] - vi) * w;
                             wsum += w;
                         }
                     });
                     *out = if wsum > 0.0 {
-                        vi + sum * (p.drag_coupling / wsum)
+                        vi + sum * (drag_coupling32 / wsum)
                     } else {
                         vi
                     };
@@ -666,12 +691,11 @@ impl Sim {
         }
 
         // Pass 3: integrate.
-        let dt = p.dt;
         self.pos.par_iter_mut().zip(&self.vel).for_each(|(pos, &v)| {
-            let mut np = *pos + v * dt;
+            let mut np = *pos + v * dt32;
             // Backstop clamp; the wall force handles the normal case.
             let rad = np.len();
-            let limit = DISH_R + 0.02;
+            let limit = dish_r32 + 0.02;
             if rad > limit {
                 np = np * (limit / rad);
             }
@@ -705,6 +729,7 @@ impl Sim {
         // The step() cell-size rule guarantees cut/cell <= 4 while chains
         // are active, so the view covers the true interaction range.
         let k = ((cut / self.hash.cell).ceil() as i32).clamp(1, 4);
+        let cut32 = cut as f32;
         let mut out = Vec::new();
         for i in 0..self.pos.len() {
             if self.field[i].w < 0.15 {
@@ -714,8 +739,8 @@ impl Sim {
                 if j <= i || j >= self.pos.len() || self.field[j].w < 0.15 {
                     return;
                 }
-                if (self.pos[i] - self.pos[j]).len() < cut {
-                    out.push((self.pos[i], self.pos[j]));
+                if (self.pos[i] - self.pos[j]).len() < cut32 {
+                    out.push((self.pos[i].to_f64(), self.pos[j].to_f64()));
                 }
             });
         }

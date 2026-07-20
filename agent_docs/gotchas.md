@@ -265,6 +265,33 @@ what implementation teaches; correct entries that turn out wrong.
   the same `par_chunks_mut` path serves both; no cfg split is needed (an
   earlier version had one, removed as pointless).
 
+## Findings from the f32 hybrid
+
+- The sim is bandwidth-bound: per-particle state was 144 B (`Vec2` f64 pos +
+  48 B `FieldSample`), ~3.9 MB at 27k, which blows the Pi 5's 2 MB L2, and the
+  neighbor pass gathers scattered `pos[j]`/`field[j]`. So particle state moved
+  to f32 (`Vec2f`, f32 `w`/`w_disp`), halving what the gather touches. This is
+  the win on a cache-starved target; on a desktop with ample cache it is
+  ~neutral (measured: small mixed deltas), as expected. Measure the real gain
+  with `make bench` on the actual Pi.
+- KEEP AoS, do not go struct-of-arrays. Splitting `Vec2` into separate `x[]`
+  and `y[]` arrays would make each scattered neighbor gather touch two cache
+  lines instead of one; f32-AoS (8 bytes, one read) is the sweet spot. The
+  "SoA" in the old deferred note was wrong for a gather-bound loop.
+- The field pass stays f64 on PURPOSE: `b_and_grad_b2` accumulates a Jacobian
+  over many 1/r^3 elements with a large near-source dynamic range, and it is
+  not the bottleneck. Particle `pos` is widened to f64 for the query
+  (`pos.to_f64()`), computed in f64, then the result stored as f32. So
+  `--grad-check` is UNCHANGED by this work (verified: 4.7e-4). If you ever
+  push the field pass to f32, grad-check is the guard to watch.
+- f32 breaks byte-exact dumps (rounding), a deliberate re-baseline like the
+  rayon change; determinism WITHIN f32 is preserved (verified). Do not
+  `cmp -s` sim dumps across this boundary; verify visually + grad-check.
+- `Vec2` (f64, world/field/render/clock) and `Vec2f` (f32, particle state)
+  are generated from one macro in vec2.rs so they cannot drift; convert only
+  at the boundary with `to_f32`/`to_f64`. The hot loops use f32 copies of the
+  `SimParams` constants (`*_32` locals in `step`), built once per step.
+
 ## Decision history
 
 - JSON presets (`src/preset.rs`) are hand-rolled flat JSON, not serde. The
