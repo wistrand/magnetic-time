@@ -358,6 +358,35 @@ what implementation teaches; correct entries that turn out wrong.
   correctly stops there. Both "Verlet lists" (rejected above) and GROMACS's
   cluster scheme are the same Verlet heritage.
 
+## Findings from the palette redo (blend vs background)
+
+- The particle blend has two directions: additive (dense marks climb toward
+  white) and subtractive (dense marks darken toward black). Both encode the
+  same thing: accumulation, so density reads as intensity. A plain
+  source-over alpha blend would NOT accumulate (a 200-particle band would look
+  like one stroke), which is why there are two modes rather than one.
+- Accumulation only has headroom in one direction per background: you can add
+  light onto dark, or subtract light from light, but not the reverse (adding
+  bright ink onto a bright bg moves nothing; it saturates at 255 immediately).
+  So the mode must match the ink-vs-bg contrast direction.
+- The ORIGINAL rule keyed the mode to `Style::bg` luminance alone (dark bg ->
+  additive). That was a hidden assumption that the palette is always a
+  dim->bright ramp (true of the old named presets, all bright). Once the
+  palette became a free `start`/`end` pair, bg luminance no longer predicts
+  the ink direction: a bright preset on a light bg picked additive and the
+  dense crests -- the whole point of the image -- blended into invisibility
+  (verified: `--bg ece9e2 --palette ice`, band crests vanished).
+- Fix: `Theme::ink_add` compares the palette `end` (the dense-crest color)
+  against bg luminance -- additive if the ink is brighter, subtractive if
+  darker. `end` is used (not `start` or a midpoint) because it is the color
+  the densest marks converge to, and those are what must contrast. A palette
+  that straddles the bg luminance has no single right answer, but that is an
+  unusual palette; the common case (both endpoints one side of the bg) is
+  exact.
+- Face theming (dial, rim, ticks, hands) still keys off bg luminance
+  (`Theme::dark`), correctly: those are not palette-colored, they just need to
+  contrast with their own background.
+
 ## Decision history
 
 - JSON presets (`src/preset.rs`) are hand-rolled flat JSON, not serde. The

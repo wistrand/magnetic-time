@@ -22,9 +22,12 @@ pub type Color = [u8; 4];
 pub const DEFAULT_BG: [u8; 3] = [16, 18, 26];
 
 /// Face colors derived from the background so any bg works: contrast colors
-/// lerp toward white on dark backgrounds and toward black on light ones.
-/// `dark` also selects the particle blend mode (additive glow vs subtractive
-/// ink).
+/// lerp toward white on dark backgrounds and toward black on light ones
+/// (`dark`). The particle blend mode is chosen separately (`ink_add`) by
+/// comparing the palette against the background, not the background alone: a
+/// free `start`/`end` palette can be brighter or darker than any bg, so
+/// keying the blend to bg luminance would erase particles whose ink runs the
+/// "wrong" way (bright ink additively blended onto a bright bg adds nothing).
 struct Theme {
     bg: Color,
     dial: Color,
@@ -34,11 +37,18 @@ struct Theme {
     hand: Color,
     second: Color,
     dark: bool,
+    /// Particle blend direction: additive (glow) when the ink is brighter
+    /// than the bg, subtractive (ink) when darker.
+    ink_add: bool,
+}
+
+fn luminance(c: [u8; 3]) -> f32 {
+    0.2126 * c[0] as f32 + 0.7152 * c[1] as f32 + 0.0722 * c[2] as f32
 }
 
 impl Theme {
-    fn from_bg(bg: [u8; 3]) -> Self {
-        let lum = 0.2126 * bg[0] as f32 + 0.7152 * bg[1] as f32 + 0.0722 * bg[2] as f32;
+    fn from_bg(bg: [u8; 3], palette: Palette) -> Self {
+        let lum = luminance(bg);
         let dark = lum < 128.0;
         let target = if dark { 255.0 } else { 0.0 };
         let toward = |t: f32| -> Color {
@@ -58,6 +68,11 @@ impl Theme {
                 [195, 40, 30, 255]
             },
             dark,
+            // Decide by the dense-crest color (`end`, the fully-magnetized
+            // ink): additive if it is brighter than the bg, else subtractive.
+            // This is what keeps the densest marks contrasting with the
+            // canvas regardless of how the palette is set.
+            ink_add: luminance(palette.end) >= lum,
         }
     }
 }
@@ -353,11 +368,13 @@ impl Framebuffer {
         self.pixels[i + 3] = 255;
     }
 
-    /// Particle "ink" blend: additive glow on dark backgrounds, subtractive
-    /// ink on light ones (subtracting the color's complement tints the pixel
-    /// toward the color, darkening as it accumulates).
-    fn blend_ink(&mut self, x: i32, y: i32, color: [u8; 3], f: f32, dark: bool) {
-        if dark {
+    /// Particle "ink" blend. `add` selects additive glow (dense marks climb
+    /// toward white, for ink brighter than the bg); otherwise subtractive ink
+    /// (subtracting the color's complement tints the pixel toward the color
+    /// and darkens as it accumulates, for ink darker than the bg). See
+    /// `Theme::ink_add`.
+    fn blend_ink(&mut self, x: i32, y: i32, color: [u8; 3], f: f32, add: bool) {
+        if add {
             self.blend_add(x, y, color, f);
             return;
         }
@@ -384,7 +401,7 @@ impl Framebuffer {
         hw: f64,
         color: [u8; 3],
         gain: f32,
-        dark: bool,
+        add: bool,
     ) {
         let pad = hw + 1.0;
         let xa = ((ax.min(bx) - pad).floor() as i32).max(0);
@@ -399,7 +416,7 @@ impl Framebuffer {
                 let t = (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0);
                 let d = ((px - ax - t * dx).powi(2) + (py - ay - t * dy).powi(2)).sqrt();
                 let f = ((1.0 - d / hw).max(0.0)) as f32 * gain;
-                self.blend_ink(x, y, color, f, dark);
+                self.blend_ink(x, y, color, f, add);
             }
         }
     }
@@ -473,7 +490,7 @@ pub fn draw_clock(
     style: Style,
     sim: Option<&Sim>,
 ) {
-    let theme = Theme::from_bg(style.bg);
+    let theme = Theme::from_bg(style.bg, style.palette);
     fb.clear(theme.bg);
     let m = Map::of(fb);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
@@ -562,9 +579,9 @@ pub fn draw_clock(
             }
         }
         if style.heatmap_res > 0 {
-            draw_heatmap(fb, &m, sim, style, theme.dark);
+            draw_heatmap(fb, &m, sim, style, theme.ink_add);
         } else {
-            draw_particles(fb, &m, sim, views, style, theme.dark);
+            draw_particles(fb, &m, sim, views, style, theme.ink_add);
         }
         if views.hash {
             draw_hash_cells(fb, &m, sim);
@@ -672,12 +689,12 @@ fn draw_quiver(fb: &mut Framebuffer, m: &Map, sources: &FieldSources) {
 }
 
 /// Blend one pixel of a band slice; mirrors `Framebuffer::blend_ink` exactly
-/// (additive glow on dark, subtractive ink on light). `i` is the byte offset
-/// into the band. Caller guarantees `i` in bounds and `f > 0`.
+/// (`add` = additive glow, else subtractive ink; see `Theme::ink_add`). `i`
+/// is the byte offset into the band. Caller guarantees `i` in bounds, `f > 0`.
 #[inline]
-fn blend_px(band: &mut [u8], i: usize, color: [u8; 3], f: f32, dark: bool) {
+fn blend_px(band: &mut [u8], i: usize, color: [u8; 3], f: f32, add: bool) {
     let fm = f.min(1.0);
-    if dark {
+    if add {
         for c in 0..3 {
             let v = band[i + c] as f32 + color[c] as f32 * fm;
             band[i + c] = v.min(255.0) as u8;
@@ -704,7 +721,7 @@ fn raster_dot(
     r: f64,
     color: [u8; 3],
     gain: f32,
-    dark: bool,
+    add: bool,
 ) {
     let xa = ((cx - r).floor() as i64).max(0);
     let xb = ((cx + r).ceil() as i64).min(width as i64 - 1);
@@ -720,7 +737,7 @@ fn raster_dot(
             let d = ((x as f64 + 0.5 - cx).powi(2) + (yc - cy).powi(2)).sqrt();
             let f = ((1.0 - d / r).max(0.0)) as f32 * gain;
             if f > 0.0 {
-                blend_px(band, (row + x as usize) * 4, color, f, dark);
+                blend_px(band, (row + x as usize) * 4, color, f, add);
             }
         }
     }
@@ -746,7 +763,7 @@ fn raster_capsule(
     hw: f64,
     color: [u8; 3],
     gain: f32,
-    dark: bool,
+    add: bool,
 ) {
     let pad = hw + 1.0;
     let xa = ((ax.min(bx) - pad).floor() as i64).max(0);
@@ -778,7 +795,7 @@ fn raster_capsule(
             let d = ((fx - ax - t * dx).powi(2) + (fy - ay - t * dy).powi(2)).sqrt();
             let f = ((1.0 - d / hw).max(0.0)) as f32 * gain;
             if f > 0.0 {
-                blend_px(band, (row + x as usize) * 4, color, f, dark);
+                blend_px(band, (row + x as usize) * 4, color, f, add);
             }
         }
     }
@@ -786,11 +803,11 @@ fn raster_capsule(
 
 /// Density heatmap: bin particles into a `heatmap_res` x `heatmap_res` grid
 /// over the dish and colour each pixel by its cell's count (log-scaled,
-/// self-normalised, base->hot ramp). Cost is O(particles) to count plus
+/// self-normalised, start->end ramp). Cost is O(particles) to count plus
 /// O(pixels) to colour, independent of clustering and stroke length -- a dense
 /// cell is one increment, where stroke rendering would draw many overlapping
 /// long strokes. Replaces `draw_particles` when `Style::heatmap_res > 0`.
-fn draw_heatmap(fb: &mut Framebuffer, m: &Map, sim: &Sim, style: Style, dark: bool) {
+fn draw_heatmap(fb: &mut Framebuffer, m: &Map, sim: &Sim, style: Style, add: bool) {
     let res = (style.heatmap_res as usize).clamp(4, 1024);
     let (w, h) = (fb.width as usize, fb.height as usize);
     if w == 0 || h == 0 {
@@ -839,13 +856,13 @@ fn draw_heatmap(fb: &mut Framebuffer, m: &Map, sim: &Sim, style: Style, dark: bo
                     }
                     let f = (1.0 + c as f32).ln() * inv;
                     let color = lut[((f * 255.0) as usize).min(255)];
-                    blend_px(band, ((y - y0) * w + x) * 4, color, f, dark);
+                    blend_px(band, ((y - y0) * w + x) * 4, color, f, add);
                 }
             }
         });
 }
 
-fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, style: Style, dark: bool) {
+fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, style: Style, add: bool) {
     let (w, h) = (fb.width as usize, fb.height as usize);
     if w == 0 || h == 0 {
         return;
@@ -875,7 +892,7 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
             if velocity {
                 let t = (vel[i].to_f64().len() / max_speed).min(1.0) as f32;
                 let c = heat_color(t);
-                raster_dot(band, w, y0, y1, cx, cy, pr, [c[0], c[1], c[2]], 0.9, dark);
+                raster_dot(band, w, y0, y1, cx, cy, pr, [c[0], c[1], c[2]], 0.9, add);
                 continue;
             }
             let wv = field[i].w_disp;
@@ -893,10 +910,10 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
                 let c = lut[((wv.clamp(0.0, 1.0) * 255.0) as usize).min(255)];
                 raster_capsule(
                     band, w, y0, y1, cx - dx, cy - dy, cx + dx, cy + dy, hw, c,
-                    0.4 + 0.35 * wv, dark,
+                    0.4 + 0.35 * wv, add,
                 );
             } else {
-                raster_dot(band, w, y0, y1, cx, cy, pr, lut[0], 0.55, dark);
+                raster_dot(band, w, y0, y1, cx, cy, pr, lut[0], 0.55, add);
             }
         }
     };

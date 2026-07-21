@@ -106,7 +106,10 @@ separate outward push since a charge's field-magnitude force is
 sign-independent); and a palette redo to a two-color `start -> end` ramp
 interpolated in OKLab (`Palette { start, end }`, baked to a 256-entry LUT per
 frame; `--palette NAME|startHex-endHex`, background separate), replacing the
-named base/hot enum.
+named base/hot enum; and the particle blend-mode selection moved off bg
+luminance alone onto a palette-vs-bg comparison (`Theme::ink_add`), so a free
+palette on any background no longer blends into invisibility (see
+[gotchas.md](gotchas.md)).
 
 ## Deferred / gated work
 

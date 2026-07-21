@@ -42,11 +42,17 @@ linearly. Headless `--size` is exact and uncapped.
   [design-simulation.md](design-simulation.md). Stroke color and length scale
   with the smoothed magnetization weight `w_disp` (start-to-end palette lerp),
   and a global stroke-length multiplier lives in `Style`.
-- Particle blending adapts to the background (`Theme` in `src/render.rs`,
-  derived from `Style::bg` luminance): additive glow on dark backgrounds,
-  subtractive ink on light ones (subtracting the color's complement tints
-  toward the palette color and darkens as it accumulates). Face colors lerp
-  from the background toward white or black. Debug overlays stay dark-tuned.
+- Particle blending has two modes (`Theme::ink_add` in `src/render.rs`):
+  additive glow (dense marks climb toward white) and subtractive ink
+  (subtracting the color's complement tints toward the palette color and
+  darkens as it accumulates). The mode is chosen by comparing the palette's
+  `end` (the dense-crest color) against `Style::bg` luminance: additive when
+  the ink is brighter than the bg, subtractive when darker, so the densest
+  marks always contrast with the canvas. Keying it to bg luminance ALONE (the
+  old rule) breaks once the palette is a free start/end range: a bright
+  preset on a light bg would blend additively into invisibility. Face colors
+  are separate and still lerp from the background toward white or black by bg
+  luminance (`Theme::dark`). Debug overlays stay dark-tuned.
 - A palette is `Palette { start, end }` (`src/render.rs`): two sRGB colors,
   the whole ramp interpolated in OKLab so the gradient is perceptually even.
   Particle color runs from `start` (low velocity, dim) to `end` (band crests,
