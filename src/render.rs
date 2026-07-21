@@ -167,6 +167,11 @@ pub struct Style {
     /// Draw a smoothed FPS overlay (interactive only; egui text, not the
     /// pixel buffer).
     pub show_fps: bool,
+    /// Render particles as a density heatmap of this grid resolution (cells
+    /// per side) instead of strokes; 0 = strokes. Cost is O(particles) to
+    /// count plus O(pixels) to colorize, independent of clustering (a dense
+    /// cell is one increment, not many overlapping strokes).
+    pub heatmap_res: u32,
 }
 
 // Part of the owner-tuned "rings" preset: hands hidden, time read from the
@@ -180,6 +185,7 @@ impl Default for Style {
             bg: DEFAULT_BG,
             max_px: 700,
             show_fps: false,
+            heatmap_res: 0,
         }
     }
 }
@@ -519,7 +525,11 @@ pub fn draw_clock(
                 fb.capsule_ink(ax, ay, bx, by, 1.0, HASH_CELL, 0.5, theme.dark);
             }
         }
-        draw_particles(fb, &m, sim, views, style, theme.dark);
+        if style.heatmap_res > 0 {
+            draw_heatmap(fb, &m, sim, style, theme.dark);
+        } else {
+            draw_particles(fb, &m, sim, views, style, theme.dark);
+        }
         if views.hash {
             draw_hash_cells(fb, &m, sim);
         }
@@ -736,6 +746,69 @@ fn raster_capsule(
             }
         }
     }
+}
+
+/// Density heatmap: bin particles into a `heatmap_res` x `heatmap_res` grid
+/// over the dish and colour each pixel by its cell's count (log-scaled,
+/// self-normalised, base->hot ramp). Cost is O(particles) to count plus
+/// O(pixels) to colour, independent of clustering and stroke length -- a dense
+/// cell is one increment, where stroke rendering would draw many overlapping
+/// long strokes. Replaces `draw_particles` when `Style::heatmap_res > 0`.
+fn draw_heatmap(fb: &mut Framebuffer, m: &Map, sim: &Sim, style: Style, dark: bool) {
+    let res = (style.heatmap_res as usize).clamp(4, 1024);
+    let (w, h) = (fb.width as usize, fb.height as usize);
+    if w == 0 || h == 0 {
+        return;
+    }
+    // Count into the grid (world [-1, 1] -> [0, res)).
+    let scale = res as f64 / 2.0;
+    let mut grid = vec![0u32; res * res];
+    for &pos in &sim.pos {
+        let p = pos.to_f64();
+        let gx = ((p.x + 1.0) * scale) as isize;
+        let gy = ((p.y + 1.0) * scale) as isize;
+        if gx >= 0 && (gx as usize) < res && gy >= 0 && (gy as usize) < res {
+            grid[gy as usize * res + gx as usize] += 1;
+        }
+    }
+    let maxc = grid.iter().copied().max().unwrap_or(0);
+    if maxc == 0 {
+        return;
+    }
+    // Log-scaled normalisation so sparse regions stay visible next to clumps.
+    let inv = 1.0 / (1.0 + maxc as f32).ln();
+    let base = style.palette.base();
+    let hot = style.palette.hot(dark);
+
+    // Colour per pixel in parallel bands (grid is read-only, pixels disjoint).
+    let bands = (rayon::current_num_threads() * 3).clamp(1, h);
+    let band_rows = h.div_ceil(bands);
+    let grid = &grid;
+    fb.pixels
+        .par_chunks_mut(band_rows * w * 4)
+        .enumerate()
+        .for_each(|(bi, band)| {
+            let y0 = bi * band_rows;
+            let y1 = (y0 + band_rows).min(h);
+            for y in y0..y1 {
+                for x in 0..w {
+                    let wp = m.world(x, y);
+                    let gx = ((wp.x + 1.0) * scale) as isize;
+                    let gy = ((wp.y + 1.0) * scale) as isize;
+                    if gx < 0 || gx as usize >= res || gy < 0 || gy as usize >= res {
+                        continue;
+                    }
+                    let c = grid[gy as usize * res + gx as usize];
+                    if c == 0 {
+                        continue;
+                    }
+                    let f = (1.0 + c as f32).ln() * inv;
+                    let color = [0, 1, 2]
+                        .map(|k| (base[k] as f32 + (hot[k] as f32 - base[k] as f32) * f) as u8);
+                    blend_px(band, ((y - y0) * w + x) * 4, color, f, dark);
+                }
+            }
+        });
 }
 
 fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, style: Style, dark: bool) {

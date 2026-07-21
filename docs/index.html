@@ -203,11 +203,18 @@
   <p>
     Attributes use the same grammar as the native CLI flags, are all optional
     (defaults are the preset above), and are live: changing one reconfigures
-    the running simulation. Add <code>dev-panel</code> to expose the tuning
+    the running simulation. <code>face</code> selects the face
+    (<code>hands</code>, <code>seg</code> for a digital HH:MM readout, or
+    <code>tide</code> for concentric arcs); <code>heatmap="N"</code> renders
+    the particles as an NxN density map instead of strokes (cheap, and its
+    cost does not grow as particles cluster); <code>fps</code> shows a
+    frame-rate overlay. Add <code>dev-panel</code> to expose the tuning
     panel, or tap the 12 o'clock tick to toggle it on any clock. Pressing
     and dragging elsewhere on the dial stirs the particles with a disc
     magnet (<code>pointer-strength</code>, <code>pointer-radius</code>;
-    strength 0 disables). Each element runs its own simulation, so keep
+    strength 0 disables). Call <code>element.savePreset()</code> /
+    <code>element.loadPreset(json)</code> to persist and restore a full
+    configuration as JSON. Each element runs its own simulation, so keep
     instances per page to a few.
   </p>
 

@@ -428,6 +428,10 @@ impl ClockApp {
             ui.checkbox(&mut self.style.show_fps, "fps");
         });
         ui.add(egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0).text("stroke length"));
+        ui.add(
+            egui::Slider::new(&mut self.style.heatmap_res, 0..=400)
+                .text("heatmap res (0 = strokes)"),
+        );
         ui.horizontal(|ui| {
             ui.label("palette");
             egui::ComboBox::from_id_salt("palette")

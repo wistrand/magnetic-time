@@ -297,6 +297,30 @@ what implementation teaches; correct entries that turn out wrong.
   at the boundary with `to_f32`/`to_f64`. The hot loops use f32 copies of the
   `SimParams` constants (`*_32` locals in `step`), built once per step.
 
+## Findings from spatial reordering
+
+- `Sim::reorder` reindexes the particle arrays into Z-order (Morton) every
+  `REORDER_EVERY` (16) steps so spatially-near particles are index-near and
+  the neighbor gather reads mostly-contiguous memory. Cost is negligible
+  (a sort + 4 permute-gathers every 16 steps, << 1% of step time), so worst
+  case is neutral; disable with a large `REORDER_EVERY` (a one-line revert).
+- Verlet neighbor lists were REJECTED first: per-step motion (~0.005-0.01) is
+  a large fraction of the interaction range (~0.0228) at dt=1/30, and the
+  rebuild is triggered by the fastest particle globally, so the list would
+  rebuild almost every step (amortization ~1x). Verlet also would not fix the
+  real cost (gathering scattered `pos[j]`), only the hash-navigation overhead.
+  Reordering fixes the gather's memory pattern instead, and needs no skin.
+- Measured FLAT on the 16-core desktop (1.0-1.02x; ample L3 hides it), same as
+  f32. The Pi upside is real but smaller than first pitched, because f32
+  ALREADY brought the default 27k working set (~1.9 MB) inside the Pi 5's 2 MB
+  L2 -- once it fits L2, scattered vs contiguous access matters less. The
+  remaining win is for HIGH particle counts (dense 50k ~3.6 MB still exceeds
+  L2) and L1 locality. Measure on the Pi with `make bench` (especially dense)
+  and keep it only if it helps there; it cannot hurt (negligible cost).
+- Deterministic (stable sort by Morton key, fixed schedule), so dumps stay
+  reproducible; but reindexing changes each particle's noise stream, so
+  results diverge in fine detail from an un-reordered run (like rayon/f32).
+
 ## Decision history
 
 - JSON presets (`src/preset.rs`) are hand-rolled flat JSON, not serde. The

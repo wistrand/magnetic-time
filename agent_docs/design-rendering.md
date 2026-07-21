@@ -67,6 +67,17 @@ linearly. Headless `--size` is exact and uncapped.
   `Framebuffer::capsule_ink` method keeps the old full-AABB scan for the
   chains debug view.
 
+- Heatmap render mode (`Style::heatmap_res > 0`, `--heatmap N`, `heatmap`
+  attribute, panel slider): `draw_heatmap` replaces `draw_particles`, binning
+  particles into an NxN density grid over the dish and colouring each pixel by
+  its cell's count (log-scaled, self-normalised, base->hot ramp, parallel
+  bands). Cost is O(particles) to count + O(pixels) to colour, INDEPENDENT of
+  clustering and stroke length: a dense cell is one increment where strokes
+  would draw many overlapping long strokes (measured ~12x cheaper than strokes
+  at 2600 px on a banded state, and roughly constant). This is the answer to
+  the clustering/banding FPS drop, and the cheap render path for the Pi.
+  `heatmap_res` is the grid resolution (blocky when small); 0 keeps strokes.
+
 Further upgrade path if CPU rasterization is still the bottleneck: eframe's
 wgpu backend supports `PaintCallback` for GPU point/stroke sprites, which
 would make stroke length nearly free but breaks the shared-rasterizer

@@ -96,6 +96,26 @@ pub struct SimParams {
 /// fades over roughly 5 steps (~1/6 display-second) instead of flashing.
 const W_DISP_SMOOTH: f32 = 0.2;
 
+/// Reorder particles into spatial (Z-order) order every this many steps, so
+/// spatially-near particles stay index-near and the neighbor gather reads
+/// contiguous memory. See `Sim::reorder`.
+const REORDER_EVERY: u64 = 16;
+
+/// Interleave the low 16 bits of `n` with zero bits (Morton "Part1By1").
+fn part1by1(mut n: u32) -> u32 {
+    n &= 0x0000_ffff;
+    n = (n | (n << 8)) & 0x00ff_00ff;
+    n = (n | (n << 4)) & 0x0f0f_0f0f;
+    n = (n | (n << 2)) & 0x3333_3333;
+    n = (n | (n << 1)) & 0x5555_5555;
+    n
+}
+
+/// Z-order (Morton) code of a grid cell, for spatial-locality sorting.
+fn morton(gx: u32, gy: u32) -> u32 {
+    part1by1(gx) | (part1by1(gy) << 1)
+}
+
 // Defaults are the owner-tuned "rings" preset from 2026-07-14
 // (screenshot-approved, full-length bar magnets); change only with the owner.
 impl Default for SimParams {
@@ -447,6 +467,38 @@ impl Sim {
         }
     }
 
+    /// Permute the particle arrays into Z-order of a coarse grid (cell size
+    /// `cell`) so spatially-near particles are index-near. The neighbor gather
+    /// then reads mostly-contiguous memory, which helps most in dense clumps
+    /// and on cache-starved targets (the Pi). Deterministic (stable sort by
+    /// Morton key), so dumps stay reproducible; but reindexing changes each
+    /// particle's noise stream, so results diverge from an un-reordered run
+    /// (fine detail only, like the rayon and f32 changes).
+    fn reorder(&mut self, cell: f64) {
+        let n = self.pos.len();
+        if n < 2 {
+            return;
+        }
+        let keys: Vec<u32> = self
+            .pos
+            .iter()
+            .map(|&p| {
+                let gx = (((p.x as f64 + 1.0) / cell) as i64).clamp(0, 0xffff) as u32;
+                let gy = (((p.y as f64 + 1.0) / cell) as i64).clamp(0, 0xffff) as u32;
+                morton(gx, gy)
+            })
+            .collect();
+        let mut order: Vec<u32> = (0..n as u32).collect();
+        order.sort_by_key(|&i| keys[i as usize]);
+        // Gather the permutation into fresh buffers (rare: every
+        // REORDER_EVERY steps). pos/vel/field carry per-particle state that
+        // must stay together; field_scratch is rebuilt each step, skip it.
+        self.pos = order.iter().map(|&i| self.pos[i as usize]).collect();
+        self.vel = order.iter().map(|&i| self.vel[i as usize]).collect();
+        self.vel_smooth = order.iter().map(|&i| self.vel_smooth[i as usize]).collect();
+        self.field = order.iter().map(|&i| self.field[i as usize]).collect();
+    }
+
     /// One fixed-dt step against the given field sources. Three parallel
     /// passes: field samples, then velocities from current positions, then
     /// integrate. Result is independent of particle order and thread
@@ -492,6 +544,11 @@ impl Sim {
         // Rebuild the grid when the cell size changes live.
         if (self.hash.cell - cell).abs() > f64::EPSILON {
             self.hash = SpatialHash::new(cell);
+        }
+        // Periodically reindex particles into spatial order so the neighbor
+        // gather below reads contiguous memory (see reorder()).
+        if self.step_index % REORDER_EVERY == 0 {
+            self.reorder(cell);
         }
         self.hash.build(&self.pos);
         let k_cells = ((range / cell).ceil() as i32).clamp(1, 4);

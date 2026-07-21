@@ -110,6 +110,7 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     e.push(format!("{}: {}", q("show_hands"), style.show_hands));
     e.push(format!("{}: {}", q("show_fps"), style.show_fps));
     num_line(&mut e, "max_px", style.max_px as f64);
+    num_line(&mut e, "heatmap_res", style.heatmap_res as f64);
 
     let body = e
         .iter()
@@ -385,6 +386,9 @@ pub fn apply_json(
     }
     if let Some(v) = num("max_px") {
         style.max_px = v.max(0.0) as u32;
+    }
+    if let Some(v) = num("heatmap_res") {
+        style.heatmap_res = v.clamp(0.0, 1024.0) as u32;
     }
 
     Ok(())

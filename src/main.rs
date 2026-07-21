@@ -93,6 +93,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--particles N] [--seed N] [--stroke-len F]
                      [--palette ice|ember|emerald|violet|mono] [--bg RRGGBB]
                      [--max-px N]  cap interactive render resolution (0 = off)
+                     [--heatmap N]  render particles as an NxN density heatmap
+                     instead of strokes (0 = strokes; cheap, cluster-proof)
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--no-dev-panel]  start with the dev panel hidden
                      (interactive; tap the 12 o'clock tick to toggle)
@@ -330,6 +332,11 @@ fn parse_args() -> Result<Options, String> {
                 opts.style.max_px = value("--max-px", &mut args)?
                     .parse()
                     .map_err(|e| format!("--max-px: {e}"))?
+            }
+            "--heatmap" => {
+                opts.style.heatmap_res = value("--heatmap", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--heatmap: {e}"))?
             }
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,

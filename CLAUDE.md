@@ -52,6 +52,7 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --particles N --seed N --size PX --stroke-len F
                                     #   --palette ice|ember|emerald|violet|mono --bg RRGGBB
                                     #   --max-px N (interactive resolution cap, 0 = off)
+                                    #   --heatmap N (density heatmap, NxN grid, instead of strokes; 0 = strokes)
                                     #   --no-dev-panel (interactive: start with dev panel hidden)
                                     #   --fps (interactive: show frame-rate overlay)
                                     #   --mobility F --max-speed F --noise F --repulsion F

@@ -95,9 +95,12 @@ so a new face is a field.rs-local change; and JSON presets (`src/preset.rs`,
 an optional FPS overlay (`--fps`); a `Makefile` for the common tasks; and a
 parallel (banded) particle rasterizer with a tighter per-row capsule scan
 that removed the last serial hot path (byte-exact, ~2.5-3.5x on the render
-pass); and an f32 hybrid for the particle state (halving the memory the
+pass); an f32 hybrid for the particle state (halving the memory the
 neighbor pass gathers, for the bandwidth-bound Pi target; field pass stays
-f64).
+f64); a heatmap render mode (`--heatmap N`) whose cost is independent of
+clustering and stroke length (the cheap render path for the Pi and the answer
+to the banding FPS drop); and spatial (Morton) reordering of particles for
+gather locality (flat on desktop, gated on a Pi measurement; see gotchas.md).
 
 ## Deferred / gated work
 
@@ -115,3 +118,23 @@ f64).
   drag coupling; revisit only if fluid-memory wakes are wanted.
 - Real threads on wasm (wasm-bindgen-rayon + COOP/COEP): not worth it at
   current counts; the component runs single-threaded by design.
+- Magnetophoretic display simulator (adjacent application, not built). This
+  engine already models the exact physics of magnetophoretic e-paper (Magna
+  Doodle, magnetic rewritable signage): ~10 um magnetic particles in a
+  viscous medium moved by a magnetic head, overdamped. The pointer magnet is
+  the stylus. One ingredient is missing to make it a driver-prototyping tool:
+  BISTABILITY, i.e. particles holding their state after the field leaves (a
+  yield-stress / stiction threshold in the velocity, below which a particle
+  does not move). This is a PHYSICS addition, not a rendering trail, so it
+  does NOT conflict with the no-trails invariant (that invariant is about
+  buffer decay; particles are already stateful frame to frame). If built,
+  gate the hold on a force threshold, not on time. Relevance is direct for
+  magnetophoretic displays; for mainstream electrophoretic (E Ink) it is only
+  a framework/intuition match (ghosting <-> the ghost-decay experiment,
+  flocculation <-> chaining, color-pigment sorting <-> a two-species
+  extension, pixel fringing <-> gradient banding). The project's headline
+  results (tidal delta*, fifth-root insensitivity) do NOT transfer to E Ink:
+  those are gradient-driven (grad|B|^2) induced-dipole physics, whereas E Ink
+  is uniform-field transport of permanently charged particles. Refs:
+  US patent 10,444,553 (magnetophoretic display driving scheme); E Ink ACeP
+  color and clearing-waveform / ghosting literature (MDPI Micromachines).

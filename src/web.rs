@@ -211,6 +211,13 @@ impl WebHandle {
         self.push();
     }
 
+    /// Render particles as an NxN density heatmap instead of strokes; 0 =
+    /// strokes.
+    pub fn set_heatmap(&self, res: u32) {
+        self.config.borrow_mut().style.heatmap_res = res.min(1024);
+        self.push();
+    }
+
     pub fn set_dev_panel(&self, on: bool) {
         self.config.borrow_mut().show_panel = on;
         self.push();
