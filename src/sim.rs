@@ -63,6 +63,10 @@ pub struct SimParams {
     /// dish (its 1/r^2 magnitude exceeds b_sat everywhere at useful
     /// strengths).
     pub pointer_visual: f64,
+    /// Repel particles from the pointer instead of attracting them (a charge
+    /// can only attract, so repel is a direct outward push; see
+    /// `FieldSources::pointer_repel_grad`).
+    pub pointer_repel: bool,
     /// Cap on the summed chain velocity per particle, units/s (stability).
     /// This, not max_speed, is the speed limit of zippering dynamics.
     pub chain_speed_cap: f64,
@@ -140,6 +144,7 @@ impl Default for SimParams {
             pointer_strength: 30.0,
             pointer_radius: 0.05,
             pointer_visual: 0.03,
+            pointer_repel: false,
             chain_speed_cap: 0.12,
             chain_max_neighbors: 48,
             chain_cone: 0.0,
@@ -441,20 +446,26 @@ impl Sim {
         }
     }
 
-    /// Live particle count change: truncate, or spawn new particles uniformly
-    /// over the dish. Interactive-only; headless runs never call this, so
-    /// dump determinism is unaffected.
+    /// Live particle count change: drop a spatially-uniform subset, or spawn
+    /// new particles uniformly over the dish. Interactive-only; headless runs
+    /// never call this, so dump determinism is unaffected.
     pub fn set_count(&mut self, n: usize) {
         self.params.count = n;
-        if n <= self.pos.len() {
-            self.pos.truncate(n);
-            self.vel.truncate(n);
-            self.vel_smooth.truncate(n);
-            self.field.truncate(n);
-            self.field_scratch.truncate(n);
+        let old = self.pos.len();
+        if n < old {
+            // The arrays are in spatial (Morton) order after `reorder`, so
+            // truncating the tail would clear a whole region. Keep a strided
+            // subset instead (evenly spaced along the Z-curve = spatially
+            // uniform).
+            let pick: Vec<usize> = (0..n).map(|i| i * old / n).collect();
+            self.pos = pick.iter().map(|&j| self.pos[j]).collect();
+            self.vel = pick.iter().map(|&j| self.vel[j]).collect();
+            self.vel_smooth = pick.iter().map(|&j| self.vel_smooth[j]).collect();
+            self.field = pick.iter().map(|&j| self.field[j]).collect();
+            self.field_scratch.truncate(n); // scratch, rebuilt each step
             // The hash still holds dangling indices until the next step.
             self.hash.build(&self.pos);
-        } else {
+        } else if n > old {
             while self.pos.len() < n {
                 let a = self.rng.f64() * TAU;
                 let r = self.rng.f64().sqrt() * DISH_R;
@@ -584,7 +595,9 @@ impl Sim {
                 // pass), then narrow the per-particle result to f32.
                 let pos = pos.to_f64();
                 let (b, g) = sources.b_and_grad_b2(pos);
-                let mut fv = g * p.mobility;
+                // Repelling pointer: an outward push scaled like the field
+                // gradient (zero in attract mode; that pointer is in `g`).
+                let mut fv = (g + sources.pointer_repel_grad(pos)) * p.mobility;
                 let sp = fv.len();
                 if sp > p.max_speed {
                     fv = fv * (p.max_speed / sp);

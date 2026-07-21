@@ -21,7 +21,7 @@ const ATTRS = [
   "particles", "speed", "stroke-len", "palette", "bg", "show-hands", "fps", "dev-panel",
   "mobility", "max-speed", "noise", "repulsion",
   "chain-strength", "chain-spacing", "chain-range", "chain-compress", "drag",
-  "pointer-strength", "pointer-radius", "pointer-visual", "max-px",
+  "pointer-strength", "pointer-radius", "pointer-visual", "pointer-repel", "max-px",
   "fluid-scale", "heatmap",
 ];
 
@@ -80,6 +80,10 @@ class MagneticClock extends HTMLElement {
         }
         if (name === "fps") {
           h.set_show_fps(this.hasAttribute(name));
+          continue;
+        }
+        if (name === "pointer-repel") {
+          h.set_pointer_repel(this.hasAttribute(name));
           continue;
         }
         if (name === "dev-panel") {

@@ -320,6 +320,43 @@ what implementation teaches; correct entries that turn out wrong.
 - Deterministic (stable sort by Morton key, fixed schedule), so dumps stay
   reproducible; but reindexing changes each particle's noise stream, so
   results diverge in fine detail from an un-reordered run (like rayon/f32).
+- Reordering broke `set_count`'s count-down path (owner-found: lowering the
+  particle count cleared whole regions). Once particles are in Morton order,
+  the LAST n are a spatial region, so tail-truncation removes that region.
+  Fixed by keeping a strided subset (`i * old / n`), evenly spaced along the
+  Z-curve = spatially uniform. Any code that assumed particle index is
+  spatially random is now wrong; reindexing correlates index with position.
+
+## Findings on SIMD (why it is not the lever)
+
+- SIMD is the wrong tool for the bottleneck. The neighbor pass is memory-gather
+  and branch bound, not FLOP bound: it gathers scattered `pos[j]`/`field[j]`
+  with data-dependent branches (r_rep, chain_range, cone gate, `w < 1e-3`) and
+  a variable neighbor count. SIMD speeds arithmetic, so it does little here;
+  the wins were memory (f32) and locality (reordering). The Pi 5's Cortex-A76
+  has NEON but no SVE, so there is no hardware gather on the target either.
+- The only real way to SIMD a neighbor pass is a GROMACS-style cluster kernel:
+  group particles into fixed clusters of 4/8, compute every cluster-vs-cluster
+  pair as a dense block, and MASK off the out-of-cutoff pairs, trading wasted
+  FLOPs for branch-free, fully-packed, gather-free lanes (Pall & Hess 2013, the
+  "Verlet cluster scheme"). It needs a per-ISA kernel set (SSE/AVX/AVX2/
+  AVX-512/NEON) plus a cluster neighbor structure, and it fights our nearest-N
+  cap (`select_nth`) and cone gate, which are data-dependent per-particle
+  selections the uniform-block model does not accommodate. Disproportionate for
+  a real-time desk clock; do not attempt.
+- SIMD does apply to the arithmetic-bound SECONDARY costs, but both are niche
+  or already handled: the field pass for field-heavy faces (tide: sqrt/div over
+  hundreds of elements, but kept f64, so ~2-wide NEON, ~2x ceiling), and the
+  rasterizer inner loop (already banded-parallel; the heatmap sidesteps it).
+- Cheap options if ever pursued, in order: LLVM already auto-vectorizes the
+  streaming passes (integrate), and f32 doubled that width (4xf32 on NEON/wasm
+  vs 2xf64); enabling wasm SIMD for the browser is a build flag
+  (`-C target-feature=+simd128`), no code, measure it; targeted NEON in the
+  tide field pass only if tide-on-Pi becomes a requirement.
+- Lineage: the perf thread walked up the MD-optimization ladder (spatial hash
+  -> Verlet lists -> cluster kernels); this project lives on the first rung and
+  correctly stops there. Both "Verlet lists" (rejected above) and GROMACS's
+  cluster scheme are the same Verlet heritage.
 
 ## Decision history
 

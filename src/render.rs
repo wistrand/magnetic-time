@@ -76,75 +76,111 @@ const POLE_N: Color = [235, 70, 70, 255];
 const POLE_S: Color = [70, 110, 245, 255];
 const HASH_CELL: [u8; 3] = [120, 255, 150];
 
-/// Particle color scale: `base` for unmagnetized dots, lerped toward `hot`
-/// as magnetization saturates. Additive blending pushes dense areas toward
-/// white regardless, so palettes read as a tint, not an absolute color.
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(c: f32) -> f32 {
+    if c <= 0.0031308 {
+        12.92 * c
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+/// sRGB (u8) -> OKLab (Ottosson 2020). OKLab interpolation keeps the ramp
+/// perceptually even and avoids the muddy midpoints of naive sRGB lerps.
+fn srgb_to_oklab(c: [u8; 3]) -> [f32; 3] {
+    let r = srgb_to_linear(c[0] as f32 / 255.0);
+    let g = srgb_to_linear(c[1] as f32 / 255.0);
+    let b = srgb_to_linear(c[2] as f32 / 255.0);
+    let l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).cbrt();
+    let m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).cbrt();
+    let s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).cbrt();
+    [
+        0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+    ]
+}
+
+/// OKLab -> sRGB (u8), clamped to gamut.
+fn oklab_to_srgb(lab: [f32; 3]) -> [u8; 3] {
+    let [big_l, a, b] = lab;
+    let l = (big_l + 0.3963377774 * a + 0.2158037573 * b).powi(3);
+    let m = (big_l - 0.1055613458 * a - 0.0638541728 * b).powi(3);
+    let s = (big_l - 0.0894841775 * a - 1.2914855480 * b).powi(3);
+    let r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    let g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    let bl = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+    [
+        (linear_to_srgb(r).clamp(0.0, 1.0) * 255.0).round() as u8,
+        (linear_to_srgb(g).clamp(0.0, 1.0) * 255.0).round() as u8,
+        (linear_to_srgb(bl).clamp(0.0, 1.0) * 255.0).round() as u8,
+    ]
+}
+
+/// Particle color ramp: a `start` (unmagnetized) to `end` (fully magnetized)
+/// gradient, interpolated in OKLab. The background is separate (`Style::bg`).
+/// Additive/subtractive blending by density is unchanged (see the blend
+/// helpers); `end` is the max/brightest color, so pick a saturated one to
+/// avoid the blow-out to white on dark backgrounds.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Palette {
-    Ice,
-    Ember,
-    Emerald,
-    Violet,
-    Mono,
+pub struct Palette {
+    pub start: [u8; 3],
+    pub end: [u8; 3],
 }
 
 impl Palette {
-    pub const ALL: [Palette; 5] = [
-        Palette::Ice,
-        Palette::Ember,
-        Palette::Emerald,
-        Palette::Violet,
-        Palette::Mono,
+    /// Named starting points; the palette is still just the two colors.
+    pub const PRESETS: [(&'static str, Palette); 5] = [
+        ("ice", Palette { start: [125, 170, 255], end: [225, 240, 255] }),
+        ("ember", Palette { start: [255, 110, 30], end: [255, 225, 120] }),
+        ("emerald", Palette { start: [40, 190, 120], end: [190, 255, 210] }),
+        ("violet", Palette { start: [150, 90, 255], end: [240, 200, 255] }),
+        ("mono", Palette { start: [120, 125, 140], end: [245, 245, 250] }),
     ];
 
+    /// Parse a preset name or a custom "startHex-endHex" pair
+    /// (e.g. `7daaff-ffffff`).
     pub fn parse(s: &str) -> Result<Self, String> {
-        Self::ALL
-            .into_iter()
-            .find(|p| p.name() == s)
-            .ok_or_else(|| format!("unknown palette '{s}' (ice, ember, emerald, violet, mono)"))
+        if let Some((_, p)) = Self::PRESETS.iter().find(|(n, _)| *n == s) {
+            return Ok(*p);
+        }
+        if let Some((a, b)) = s.split_once('-') {
+            return Ok(Self {
+                start: parse_color(a)?,
+                end: parse_color(b)?,
+            });
+        }
+        Err(format!(
+            "unknown palette '{s}' (a preset name, or startHex-endHex like 7daaff-ffffff)"
+        ))
     }
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Palette::Ice => "ice",
-            Palette::Ember => "ember",
-            Palette::Emerald => "emerald",
-            Palette::Violet => "violet",
-            Palette::Mono => "mono",
-        }
+    /// 256-entry sRGB gradient from `start` to `end` in OKLab, built once per
+    /// frame so the per-particle color is a table lookup, not a cbrt/pow.
+    pub fn lut(&self) -> [[u8; 3]; 256] {
+        let a = srgb_to_oklab(self.start);
+        let b = srgb_to_oklab(self.end);
+        std::array::from_fn(|i| {
+            let t = i as f32 / 255.0;
+            oklab_to_srgb([
+                a[0] + (b[0] - a[0]) * t,
+                a[1] + (b[1] - a[1]) * t,
+                a[2] + (b[2] - a[2]) * t,
+            ])
+        })
     }
+}
 
-    fn base(self) -> [u8; 3] {
-        match self {
-            Palette::Ice => [125, 170, 255],
-            Palette::Ember => [255, 120, 40],
-            Palette::Emerald => [70, 215, 140],
-            Palette::Violet => [185, 110, 255],
-            Palette::Mono => [160, 165, 180],
-        }
-    }
-
-    /// Stroke color at full magnetization. On dark backgrounds strokes glow
-    /// toward near-white; on light ones they deepen toward a dark saturated
-    /// tone (near-white ink would be invisible).
-    fn hot(self, dark: bool) -> [u8; 3] {
-        if dark {
-            match self {
-                Palette::Ice => [230, 240, 255],
-                Palette::Ember => [255, 235, 190],
-                Palette::Emerald => [225, 255, 235],
-                Palette::Violet => [245, 225, 255],
-                Palette::Mono => [255, 255, 255],
-            }
-        } else {
-            match self {
-                Palette::Ice => [30, 60, 160],
-                Palette::Ember => [180, 60, 10],
-                Palette::Emerald => [10, 120, 60],
-                Palette::Violet => [110, 30, 170],
-                Palette::Mono => [20, 20, 25],
-            }
-        }
+impl Default for Palette {
+    fn default() -> Self {
+        Self::PRESETS[0].1
     }
 }
 
@@ -181,7 +217,7 @@ impl Default for Style {
         Self {
             stroke_len: 0.6,
             show_hands: false,
-            palette: Palette::Ice,
+            palette: Palette::default(),
             bg: DEFAULT_BG,
             max_px: 700,
             show_fps: false,
@@ -777,8 +813,7 @@ fn draw_heatmap(fb: &mut Framebuffer, m: &Map, sim: &Sim, style: Style, dark: bo
     }
     // Log-scaled normalisation so sparse regions stay visible next to clumps.
     let inv = 1.0 / (1.0 + maxc as f32).ln();
-    let base = style.palette.base();
-    let hot = style.palette.hot(dark);
+    let lut = style.palette.lut();
 
     // Colour per pixel in parallel bands (grid is read-only, pixels disjoint).
     let bands = (rayon::current_num_threads() * 3).clamp(1, h);
@@ -803,8 +838,7 @@ fn draw_heatmap(fb: &mut Framebuffer, m: &Map, sim: &Sim, style: Style, dark: bo
                         continue;
                     }
                     let f = (1.0 + c as f32).ln() * inv;
-                    let color = [0, 1, 2]
-                        .map(|k| (base[k] as f32 + (hot[k] as f32 - base[k] as f32) * f) as u8);
+                    let color = lut[((f * 255.0) as usize).min(255)];
                     blend_px(band, ((y - y0) * w + x) * 4, color, f, dark);
                 }
             }
@@ -818,8 +852,7 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
     }
     let pr = (m.r * 0.006).max(1.3);
     let max_speed = sim.params.max_speed;
-    let base = style.palette.base();
-    let hot = style.palette.hot(dark);
+    let lut = style.palette.lut();
     let stroke_len = style.stroke_len;
     let velocity = views.velocity;
     let (pos, field, vel) = (&sim.pos, &sim.field, &sim.vel);
@@ -857,14 +890,13 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
                 if ymax < y0 as i64 || ymin >= y1 as i64 {
                     continue;
                 }
-                let c = [0, 1, 2]
-                    .map(|k| (base[k] as f32 + (hot[k] as f32 - base[k] as f32) * wv) as u8);
+                let c = lut[((wv.clamp(0.0, 1.0) * 255.0) as usize).min(255)];
                 raster_capsule(
                     band, w, y0, y1, cx - dx, cy - dy, cx + dx, cy + dy, hw, c,
                     0.4 + 0.35 * wv, dark,
                 );
             } else {
-                raster_dot(band, w, y0, y1, cx, cy, pr, base, 0.55, dark);
+                raster_dot(band, w, y0, y1, cx, cy, pr, lut[0], 0.55, dark);
             }
         }
     };

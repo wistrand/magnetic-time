@@ -79,7 +79,7 @@ constant (dt, field_clamp, chain caps, repulsion radius), the nearest-N
 neighbor selection, the fluid_scale band-size dial, and the public writeup
 docs/banding.html.
 
-Latest work (2026-07-15): the chain-length question resolved (chains are
+Latest work (2026-07-21): the chain-length question resolved (chains are
 regime-dependent, absorbed by dense bands, not bond-limited; measured via
 `--dump-positions` and the experimental `--chain-cone` probe, see
 [research-chain-banding.md](research-chain-banding.md) finding 10); the
@@ -99,8 +99,14 @@ pass); an f32 hybrid for the particle state (halving the memory the
 neighbor pass gathers, for the bandwidth-bound Pi target; field pass stays
 f64); a heatmap render mode (`--heatmap N`) whose cost is independent of
 clustering and stroke length (the cheap render path for the Pi and the answer
-to the banding FPS drop); and spatial (Morton) reordering of particles for
-gather locality (flat on desktop, gated on a Pi measurement; see gotchas.md).
+to the banding FPS drop); spatial (Morton) reordering of particles for
+gather locality (flat on desktop, gated on a Pi measurement; see gotchas.md);
+a pointer magnet that can repel as well as attract (`--pointer-repel`, a
+separate outward push since a charge's field-magnitude force is
+sign-independent); and a palette redo to a two-color `start -> end` ramp
+interpolated in OKLab (`Palette { start, end }`, baked to a 256-entry LUT per
+frame; `--palette NAME|startHex-endHex`, background separate), replacing the
+named base/hot enum.
 
 ## Deferred / gated work
 

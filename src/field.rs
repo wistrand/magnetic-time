@@ -640,11 +640,11 @@ fn expand(
 pub struct FieldSources {
     elements: Vec<Element>,
     pub markers: Vec<Marker>,
-    /// The interactive pointer magnet (pos, q, r_min) when active. Kept
-    /// separately so the sim can attenuate it in the display/magnetization
-    /// field: the pointer must be strong to exert force (F ~ grad|B|^2) but
-    /// would otherwise saturate stroke color and orientation dish-wide.
-    pointer: Option<(Vec2, f64, f64)>,
+    /// The interactive pointer magnet (pos, strength, r_min, repel) when down.
+    /// Kept separately so the sim can attenuate the attracting pointer in the
+    /// display field (it must be strong to exert force but would otherwise
+    /// saturate stroke color dish-wide) and add the repelling one's push.
+    pointer: Option<(Vec2, f64, f64, bool)>,
 }
 
 impl FieldSources {
@@ -687,31 +687,53 @@ impl FieldSources {
     /// the dish, whose in-plane field is radial. Modeled as a single soft
     /// charge (pole face), clamped over the disc radius. Appended by the app
     /// after the hand elements whenever the pointer is down.
-    pub fn add_pointer(&mut self, pos: Vec2, strength: f64, radius: f64) {
+    pub fn add_pointer(&mut self, pos: Vec2, strength: f64, radius: f64, repel: bool) {
         let r_min = radius.max(MIN_DIST);
-        self.elements.push(Element::Charge {
-            pos,
-            q: strength,
-            r_min,
-        });
+        // Attract: a field charge (a |B| maximum the particles climb toward).
+        // Repel: no field element; the sim adds an outward push instead (a
+        // charge always makes a maximum, so flipping its sign cannot turn
+        // attraction into repulsion). See `pointer_repel_grad`.
+        if !repel {
+            self.elements.push(Element::Charge {
+                pos,
+                q: strength,
+                r_min,
+            });
+        }
         self.markers.push(Marker {
             pos,
             dir: Vec2::ZERO,
             shape: MagnetShape::Disc { radius },
         });
-        self.pointer = Some((pos, strength, r_min));
+        self.pointer = Some((pos, strength, r_min, repel));
     }
 
-    /// The pointer magnet's own field contribution (zero when inactive).
+    /// The attracting pointer's own field contribution (zero otherwise, incl.
+    /// the repelling pointer, which is a direct force not a field element).
     /// Must match the Element::Charge branch of `b()`.
     pub fn pointer_b(&self, p: Vec2) -> Vec2 {
         match self.pointer {
-            None => Vec2::ZERO,
-            Some((pos, q, r_min)) => {
+            Some((pos, q, r_min, false)) => {
                 let dp = p - pos;
                 let dist = dp.len().max(r_min);
                 dp * (q / (dist * dist * dist))
             }
+            _ => Vec2::ZERO,
+        }
+    }
+
+    /// Outward push gradient for a repelling pointer (zero otherwise), scaled
+    /// like grad(|B|^2) so the sim multiplies it by mobility and caps it with
+    /// the same `max_speed`. Magnitude equals the charge's own attraction
+    /// self-gradient (4 q^2 / r^5) but points away, so repel mirrors attract.
+    pub fn pointer_repel_grad(&self, p: Vec2) -> Vec2 {
+        match self.pointer {
+            Some((pos, strength, r_min, true)) => {
+                let dp = p - pos;
+                let dist = dp.len().max(r_min);
+                (dp / dist) * (4.0 * strength * strength / dist.powi(5))
+            }
+            _ => Vec2::ZERO,
         }
     }
 

@@ -91,7 +91,9 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      positions + local field as CSV (x,y,dir_x,dir_y,w)
                      [--view field,quiver,dipoles,velocity,hash]
                      [--particles N] [--seed N] [--stroke-len F]
-                     [--palette ice|ember|emerald|violet|mono] [--bg RRGGBB]
+                     [--palette NAME|startHex-endHex] [--bg RRGGBB]  particle
+                     color ramp (start -> end, OKLab); NAME = ice|ember|emerald|
+                     violet|mono preset. Background is separate.
                      [--max-px N]  cap interactive render resolution (0 = off)
                      [--heatmap N]  render particles as an NxN density heatmap
                      instead of strokes (0 = strokes; cheap, cluster-proof)
@@ -108,6 +110,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      to +-DEG of the moment axis (0 = physical 54.7 cone)
                      [--pointer-strength F] [--pointer-radius F]  touch/mouse magnet
                      [--pointer-visual F]  pointer weight in stroke color/orientation
+                     [--pointer-repel]  touch/mouse magnet repels instead of attracts
                      [--anneal-from F --anneal-for SECONDS]  headless: run the
                      first SECONDS at chain-strength F, then switch
                      [--grad-check]  verify analytic field gradient, then exit
@@ -342,6 +345,7 @@ fn parse_args() -> Result<Options, String> {
             "--show-hands" => opts.style.show_hands = true,
             "--no-dev-panel" => opts.show_panel = false,
             "--fps" => opts.style.show_fps = true,
+            "--pointer-repel" => opts.sim.pointer_repel = true,
             "--grad-check" => opts.grad_check = true,
             "--anneal-from" => {
                 opts.anneal_from = value("--anneal-from", &mut args)?

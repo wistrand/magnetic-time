@@ -79,6 +79,7 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     num_line(&mut e, "pointer_strength", sim.pointer_strength);
     num_line(&mut e, "pointer_radius", sim.pointer_radius);
     num_line(&mut e, "pointer_visual", sim.pointer_visual);
+    e.push(format!("{}: {}", q("pointer_repel"), sim.pointer_repel));
     num_line(&mut e, "field_clamp", sim.field_clamp);
     num_line(&mut e, "fluid_scale", sim.fluid_scale);
 
@@ -100,12 +101,10 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     }
 
     // Style.
-    e.push(format!("{}: {}", q("palette"), q(style.palette.name())));
-    e.push(format!(
-        "{}: {}",
-        q("bg"),
-        q(&format!("{:02x}{:02x}{:02x}", style.bg[0], style.bg[1], style.bg[2]))
-    ));
+    let hex = |c: [u8; 3]| format!("{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
+    e.push(format!("{}: {}", q("palette_start"), q(&hex(style.palette.start))));
+    e.push(format!("{}: {}", q("palette_end"), q(&hex(style.palette.end))));
+    e.push(format!("{}: {}", q("bg"), q(&hex(style.bg))));
     num_line(&mut e, "stroke_len", style.stroke_len);
     e.push(format!("{}: {}", q("show_hands"), style.show_hands));
     e.push(format!("{}: {}", q("show_fps"), style.show_fps));
@@ -317,6 +316,9 @@ pub fn apply_json(
     if let Some(v) = num("pointer_visual") {
         sim.pointer_visual = bounds::POINTER_VISUAL.clamp(v);
     }
+    if let Some(v) = flag("pointer_repel") {
+        sim.pointer_repel = v;
+    }
     if let Some(v) = num("field_clamp") {
         sim.field_clamp = bounds::FIELD_CLAMP.clamp(v);
     }
@@ -365,9 +367,21 @@ pub fn apply_json(
     }
 
     // Style.
+    // A "palette" name (or startHex-endHex) sets both; palette_start/_end
+    // override each.
     if let Some(v) = text("palette") {
         if let Ok(p) = Palette::parse(v) {
             style.palette = p;
+        }
+    }
+    if let Some(v) = text("palette_start") {
+        if let Ok(c) = parse_color(v) {
+            style.palette.start = c;
+        }
+    }
+    if let Some(v) = text("palette_end") {
+        if let Ok(c) = parse_color(v) {
+            style.palette.end = c;
         }
     }
     if let Some(v) = text("bg") {

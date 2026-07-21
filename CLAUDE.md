@@ -50,7 +50,9 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     # more flags: --view field,quiver,dipoles,velocity,hash,chains
                                     #   --preset FILE.json (load), --save-preset FILE.json (dump config + exit)
                                     #   --particles N --seed N --size PX --stroke-len F
-                                    #   --palette ice|ember|emerald|violet|mono --bg RRGGBB
+                                    #   --palette NAME|startHex-endHex --bg RRGGBB
+                                    #     (color ramp start -> end in OKLab; NAME =
+                                    #      ice|ember|emerald|violet|mono; bg separate)
                                     #   --max-px N (interactive resolution cap, 0 = off)
                                     #   --heatmap N (density heatmap, NxN grid, instead of strokes; 0 = strokes)
                                     #   --no-dev-panel (interactive: start with dev panel hidden)
@@ -71,6 +73,7 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #     of the microphysics, wavelength scales linearly)
                                     #   --pointer-strength F --pointer-radius F --pointer-visual F
                                     #     (touch/mouse magnet; visual = weight in stroke color)
+                                    #   --pointer-repel (touch/mouse magnet repels instead of attracts)
 magnetic-time --grad-check          # verify analytic field gradient vs numeric; run after
                                     # changing field elements (honors --magnets/--shapes)
                                     # headless two-phase runs (hysteresis experiments):

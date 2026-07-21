@@ -40,14 +40,24 @@ linearly. Headless `--size` is exact and uncapped.
   field direction (falls back to a dot where the field is weak). Strokes are
   what make chains read as chains; see
   [design-simulation.md](design-simulation.md). Stroke color and length scale
-  with the smoothed magnetization weight `w_disp` (base-to-hot palette lerp),
+  with the smoothed magnetization weight `w_disp` (start-to-end palette lerp),
   and a global stroke-length multiplier lives in `Style`.
 - Particle blending adapts to the background (`Theme` in `src/render.rs`,
   derived from `Style::bg` luminance): additive glow on dark backgrounds,
   subtractive ink on light ones (subtracting the color's complement tints
-  toward the palette color and darkens as it accumulates). Palettes carry a
-  separate saturated color per mode; face colors lerp from the background
-  toward white or black. Debug overlays stay dark-tuned.
+  toward the palette color and darkens as it accumulates). Face colors lerp
+  from the background toward white or black. Debug overlays stay dark-tuned.
+- A palette is `Palette { start, end }` (`src/render.rs`): two sRGB colors,
+  the whole ramp interpolated in OKLab so the gradient is perceptually even.
+  Particle color runs from `start` (low velocity, dim) to `end` (band crests,
+  max). `--palette` takes either a preset name (`ice|ember|emerald|violet|
+  mono`, in `Palette::PRESETS`) or a custom `startHex-endHex` pair; the panel
+  exposes both endpoints as color pickers plus preset buttons. `Palette::lut`
+  bakes the ramp to a 256-entry sRGB table once per frame, so per-particle
+  color is a table lookup, not an OKLab conversion. Background (`Style::bg`) is
+  separate and drives the theme, not the ramp. On dark backgrounds pick an
+  `end` short of pure white or additive accumulation still blows dense cores
+  out; a saturated `end` (a channel near 0) instead saturates to that hue.
 - Never draw particles as per-particle egui shapes; the tessellator cannot
   handle tens of thousands of primitives per frame.
 - The particle pass is parallel: `draw_particles` splits the buffer into
@@ -70,7 +80,8 @@ linearly. Headless `--size` is exact and uncapped.
 - Heatmap render mode (`Style::heatmap_res > 0`, `--heatmap N`, `heatmap`
   attribute, panel slider): `draw_heatmap` replaces `draw_particles`, binning
   particles into an NxN density grid over the dish and colouring each pixel by
-  its cell's count (log-scaled, self-normalised, base->hot ramp, parallel
+  its cell's count (log-scaled, self-normalised, start->end ramp via the same
+  `Palette::lut`, parallel
   bands). Cost is O(particles) to count + O(pixels) to colour, INDEPENDENT of
   clustering and stroke length: a dense cell is one increment where strokes
   would draw many overlapping long strokes (measured ~12x cheaper than strokes

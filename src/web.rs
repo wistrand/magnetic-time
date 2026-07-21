@@ -188,7 +188,8 @@ impl WebHandle {
         Ok(())
     }
 
-    /// Particle color scale ("ice", "ember", "emerald", "violet", "mono").
+    /// Particle color ramp: a preset name ("ice", "ember", "emerald",
+    /// "violet", "mono") or a custom "startHex-endHex" pair.
     pub fn set_palette(&self, v: &str) -> Result<(), JsValue> {
         self.config.borrow_mut().style.palette =
             crate::render::Palette::parse(v).map_err(js_err)?;
@@ -283,6 +284,12 @@ impl WebHandle {
     /// unaffected.
     pub fn set_pointer_visual(&self, v: f64) {
         self.config.borrow_mut().sim.pointer_visual = crate::sim::bounds::POINTER_VISUAL.clamp(v);
+        self.push();
+    }
+
+    /// Whether the pointer magnet repels particles instead of attracting them.
+    pub fn set_pointer_repel(&self, on: bool) {
+        self.config.borrow_mut().sim.pointer_repel = on;
         self.push();
     }
 

@@ -142,7 +142,7 @@ impl ClockApp {
         if let Some((world, _)) = self.pointer {
             let p = &self.sim.params;
             if p.pointer_strength > 0.0 {
-                sources.add_pointer(world, p.pointer_strength, p.pointer_radius);
+                sources.add_pointer(world, p.pointer_strength, p.pointer_radius, p.pointer_repel);
             }
         }
         sources
@@ -432,17 +432,22 @@ impl ClockApp {
             egui::Slider::new(&mut self.style.heatmap_res, 0..=400)
                 .text("heatmap res (0 = strokes)"),
         );
+        // Palette: a start -> end color ramp (OKLab); background separate.
         ui.horizontal(|ui| {
-            ui.label("palette");
-            egui::ComboBox::from_id_salt("palette")
-                .selected_text(self.style.palette.name())
-                .show_ui(ui, |ui| {
-                    for p in crate::render::Palette::ALL {
-                        ui.selectable_value(&mut self.style.palette, p, p.name());
-                    }
-                });
+            ui.label("colors");
+            ui.color_edit_button_srgb(&mut self.style.palette.start);
+            ui.label("->");
+            ui.color_edit_button_srgb(&mut self.style.palette.end);
             ui.label("bg");
             ui.color_edit_button_srgb(&mut self.style.bg);
+        });
+        ui.horizontal(|ui| {
+            ui.label("preset");
+            for (name, p) in crate::render::Palette::PRESETS {
+                if ui.small_button(name).clicked() {
+                    self.style.palette = p;
+                }
+            }
         });
 
         ui.separator();
@@ -553,6 +558,7 @@ impl ClockApp {
                 egui::Slider::new(&mut p.pointer_visual, crate::sim::bounds::POINTER_VISUAL.ui())
                     .text("pointer visual"),
             );
+            ui.checkbox(&mut p.pointer_repel, "pointer repels");
         });
         ui.collapsing("render", |ui| {
             ui.add(

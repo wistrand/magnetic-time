@@ -169,6 +169,14 @@ and ~7.5 mm bands.
   point it at the finger. The rendered weight `w_disp` is also low-passed
   (W_DISP_SMOOTH in `src/sim.rs`) so press/release fades instead of
   flashing. Do not "simplify" these back to the raw field.
+- Pointer repel (`pointer_repel`, `--pointer-repel`): a charge always makes a
+  |B| MAXIMUM, and F ~ grad(|B|^2) climbs to maxima, so a charge can only
+  attract; flipping its sign does nothing. Repel is therefore a separate
+  mechanism: `FieldSources::pointer_repel_grad` returns an OUTWARD gradient of
+  the same magnitude as the charge's attraction self-gradient (4 q^2 / r^5),
+  added to `g` in pass 1 and scaled by mobility and capped by max_speed like
+  the field force, so repel mirrors attract. In repel mode the pointer is not
+  a field element (no attraction, no display attenuation).
 - Drag coupling (`drag_coupling`, 0 = off): XSPH-style velocity smoothing
   after the force pass; each particle's velocity blends toward the
   kernel-weighted mean of its neighbors' within `chain_range`. Models

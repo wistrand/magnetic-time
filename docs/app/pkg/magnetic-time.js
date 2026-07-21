@@ -154,7 +154,8 @@ export class WebHandle {
         wasm.webhandle_set_noise(this.__wbg_ptr, v);
     }
     /**
-     * Particle color scale ("ice", "ember", "emerald", "violet", "mono").
+     * Particle color ramp: a preset name ("ice", "ember", "emerald",
+     * "violet", "mono") or a custom "startHex-endHex" pair.
      * @param {string} v
      */
     set_palette(v) {
@@ -176,6 +177,13 @@ export class WebHandle {
      */
     set_pointer_radius(v) {
         wasm.webhandle_set_pointer_radius(this.__wbg_ptr, v);
+    }
+    /**
+     * Whether the pointer magnet repels particles instead of attracting them.
+     * @param {boolean} on
+     */
+    set_pointer_repel(on) {
+        wasm.webhandle_set_pointer_repel(this.__wbg_ptr, on);
     }
     /**
      * Touch/mouse magnet strength; 0 disables interaction.
