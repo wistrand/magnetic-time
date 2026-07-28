@@ -565,6 +565,7 @@ impl ClockApp {
                 egui::Slider::new(&mut self.style.max_px, 0..=2048)
                     .text("res cap px (0 = off)"),
             );
+            ui.add(egui::Slider::new(&mut self.style.pad, 0.0..=0.45).text("dial padding"));
         });
 
         ui.separator();
@@ -597,6 +598,12 @@ impl eframe::App for ClockApp {
             self.apply_config(cfg);
         }
 
+        // The escape hatch for --fullscreen/--kiosk runs.
+        #[cfg(not(target_arch = "wasm32"))]
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
         if self.show_panel {
             self.dev_panel(ctx);
         }
@@ -624,10 +631,19 @@ impl eframe::App for ClockApp {
         }
 
         let bg = self.style.bg;
+        let fill = if self.style.transparent_bg {
+            egui::Color32::TRANSPARENT
+        } else {
+            egui::Color32::from_rgb(bg[0], bg[1], bg[2])
+        };
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(egui::Color32::from_rgb(bg[0], bg[1], bg[2])))
+            .frame(egui::Frame::NONE.fill(fill))
             .show(ctx, |ui| {
                 let avail = ui.available_rect_before_wrap();
+                // Per-side margin as a fraction of the short side; the dial
+                // square shrinks, the frame fill covers the rest.
+                let avail = avail.shrink(self.style.pad.clamp(0.0, 0.45) as f32
+                    * avail.width().min(avail.height()));
                 let side_pts = avail.width().min(avail.height()).max(64.0);
                 let ppp = ctx.pixels_per_point();
                 let mut px = (side_pts * ppp).round().max(64.0) as u32;
@@ -727,5 +743,14 @@ impl eframe::App for ClockApp {
 
         // Idle egui repaints only on input; without this the clock freezes.
         ctx.request_repaint();
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        if self.style.transparent_bg {
+            [0.0; 4]
+        } else {
+            // eframe's default; only visible where nothing else paints.
+            egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
+        }
     }
 }

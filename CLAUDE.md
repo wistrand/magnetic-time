@@ -56,6 +56,12 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --max-px N (interactive resolution cap, 0 = off)
                                     #   --heatmap N (density heatmap, NxN grid, instead of strokes; 0 = strokes)
                                     #   --no-dev-panel (interactive: start with dev panel hidden)
+                                    #   --fullscreen (interactive: borderless fullscreen, Esc quits)
+                                    #   --window-size WxH (interactive window size, default 1000x820)
+                                    #   --pad F (margin around the dial per side, 0..0.45 of short side)
+                                    #   --transparent-bg (alpha-0 outside the dial: circular window
+                                    #     look under a compositor; PNG dumps get transparent corners)
+                                    #   --kiosk (= --fullscreen --no-controls --no-dev-panel)
                                     #   --fps (interactive: show frame-rate overlay)
                                     #   --mobility F --max-speed F --noise F --repulsion F
                                     #   --face hands|seg|seg-hms|tide (hands, 7-seg digital, or concentric tide arcs)

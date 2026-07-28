@@ -51,6 +51,10 @@ struct Options {
     /// Start with the dev panel shown (interactive). Toggle at runtime with
     /// the 12 o'clock tick either way.
     show_panel: bool,
+    /// Start borderless fullscreen (interactive).
+    fullscreen: bool,
+    /// Initial window inner size in points (interactive, windowed mode).
+    window_size: (f32, f32),
     /// Verify the analytic gradient against central differences and exit.
     grad_check: bool,
     /// Headless annealing: run the first `anneal_for` sim-seconds with
@@ -77,6 +81,8 @@ impl Default for Options {
             face: field::FaceConfigs::default(),
             save_preset: None,
             show_panel: true,
+            fullscreen: false,
+            window_size: (1000.0, 820.0),
             grad_check: false,
             anneal_from: 0.0,
             anneal_for: 0.0,
@@ -100,6 +106,17 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--no-dev-panel]  start with the dev panel hidden
                      (interactive; tap the 12 o'clock tick to toggle)
+                     [--fullscreen]  borderless fullscreen, no decorations
+                     (interactive; Esc quits)
+                     [--window-size WxH]  initial window size in points
+                     (interactive, windowed mode; default 1000x820)
+                     [--pad F]  margin around the dial per side, as a fraction
+                     of the window's short side (0..=0.45)
+                     [--transparent-bg]  alpha-0 outside the dial disc; with a
+                     compositor only the circular dial is visible (clicks in
+                     the corners still hit the window). Headless PNGs get
+                     transparent corners.
+                     [--kiosk]  shorthand for --fullscreen --no-dev-panel
                      [--fps]  show a frame-rate overlay (interactive)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
@@ -344,6 +361,27 @@ fn parse_args() -> Result<Options, String> {
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
             "--no-dev-panel" => opts.show_panel = false,
+            "--pad" => {
+                opts.style.pad = value("--pad", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--pad: {e}"))?
+            }
+            "--fullscreen" => opts.fullscreen = true,
+            "--window-size" => {
+                let v = value("--window-size", &mut args)?;
+                let (w, h) = v
+                    .split_once(['x', 'X'])
+                    .ok_or(format!("--window-size: expected WxH, got '{v}'"))?;
+                opts.window_size = (
+                    w.parse().map_err(|e| format!("--window-size: {e}"))?,
+                    h.parse().map_err(|e| format!("--window-size: {e}"))?,
+                );
+            }
+            "--transparent-bg" => opts.style.transparent_bg = true,
+            "--kiosk" => {
+                opts.fullscreen = true;
+                opts.show_panel = false;
+            }
             "--fps" => opts.style.show_fps = true,
             "--pointer-repel" => opts.sim.pointer_repel = true,
             "--grad-check" => opts.grad_check = true,
@@ -383,6 +421,13 @@ fn parse_args() -> Result<Options, String> {
     }
     if opts.size == 0 {
         return Err("--size must be >= 1".to_string());
+    }
+    if !opts.style.pad.is_finite() || !(0.0..=0.45).contains(&opts.style.pad) {
+        return Err(format!("--pad must be in 0..=0.45, got {}", opts.style.pad));
+    }
+    let (w, h) = opts.window_size;
+    if !(w.is_finite() && h.is_finite()) || w < 64.0 || h < 64.0 {
+        return Err(format!("--window-size: sides must be >= 64, got {w}x{h}"));
     }
     if !opts.speed.is_finite() {
         return Err(format!("--speed must be finite, got {}", opts.speed));
@@ -519,10 +564,17 @@ fn main() -> ExitCode {
         Some(t) => ClockSource::at(t, opts.speed),
         None => ClockSource::wall(opts.speed),
     };
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_inner_size([opts.window_size.0, opts.window_size.1])
+        .with_title("magnetic-time");
+    if opts.fullscreen {
+        viewport = viewport.with_fullscreen(true).with_decorations(false);
+    }
+    if opts.style.transparent_bg {
+        viewport = viewport.with_transparent(true).with_decorations(false);
+    }
     let native_options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([1000.0, 820.0])
-            .with_title("magnetic-time"),
+        viewport,
         ..Default::default()
     };
     match eframe::run_native(

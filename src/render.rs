@@ -223,6 +223,14 @@ pub struct Style {
     /// count plus O(pixels) to colorize, independent of clustering (a dense
     /// cell is one increment, not many overlapping strokes).
     pub heatmap_res: u32,
+    /// Interactive: margin around the dial on each side, as a fraction of
+    /// the window's short side (0..=0.45). Headless --size is unaffected.
+    pub pad: f64,
+    /// Alpha-0 clear outside the dial disc instead of the bg fill; with a
+    /// transparent window (set at startup from this flag) only the circular
+    /// dial is visible. Headless PNGs get transparent corners too. --bg still
+    /// drives the theme (dial, rim, particle blend).
+    pub transparent_bg: bool,
 }
 
 // Part of the owner-tuned "rings" preset: hands hidden, time read from the
@@ -237,6 +245,8 @@ impl Default for Style {
             max_px: 700,
             show_fps: false,
             heatmap_res: 0,
+            pad: 0.0,
+            transparent_bg: false,
         }
     }
 }
@@ -491,7 +501,11 @@ pub fn draw_clock(
     sim: Option<&Sim>,
 ) {
     let theme = Theme::from_bg(style.bg, style.palette);
-    fb.clear(theme.bg);
+    if style.transparent_bg {
+        fb.clear([0, 0, 0, 0]);
+    } else {
+        fb.clear(theme.bg);
+    }
     let m = Map::of(fb);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
 
