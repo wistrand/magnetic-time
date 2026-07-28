@@ -579,9 +579,14 @@ impl ClockApp {
         });
         ui.separator();
         #[cfg(not(target_arch = "wasm32"))]
-        if ui.button("dump frame").clicked() {
-            self.dump_frame();
-        }
+        ui.horizontal(|ui| {
+            if ui.button("dump frame").clicked() {
+                self.dump_frame();
+            }
+            if ui.button("exit").clicked() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        });
         if let Some(status) = &self.dump_status {
             ui.label(status.clone());
         }
