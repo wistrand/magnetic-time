@@ -51,6 +51,11 @@ struct Options {
     /// Start with the dev panel shown (interactive). Toggle at runtime with
     /// the 12 o'clock tick either way.
     show_panel: bool,
+    /// Autosave config changes to preset::autosave_path() and reload them on
+    /// the next interactive start. Enabled by --autosave, the dev panel
+    /// checkbox, or an existing autosave file; --no-autosave skips both the
+    /// load and the saving for this run.
+    autosave: bool,
     /// Start borderless fullscreen (interactive).
     fullscreen: bool,
     /// Initial window inner size in points (interactive, windowed mode).
@@ -81,6 +86,7 @@ impl Default for Options {
             face: field::FaceConfigs::default(),
             save_preset: None,
             show_panel: true,
+            autosave: false,
             fullscreen: false,
             window_size: (1000.0, 820.0),
             grad_check: false,
@@ -117,6 +123,11 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      the corners still hit the window). Headless PNGs get
                      transparent corners.
                      [--kiosk]  shorthand for --fullscreen --no-dev-panel
+                     [--autosave]  save config changes to
+                     ~/.config/magnetic-time/autosave.json and reload them on
+                     the next start (also a dev panel checkbox; flags override
+                     the loaded values)
+                     [--no-autosave]  ignore the autosave file this run
                      [--fps]  show a frame-rate overlay (interactive)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
@@ -154,7 +165,32 @@ fn parse_args() -> Result<Options, String> {
     // Applied after the loop so --strengths/--shapes work in any flag order.
     let mut strengths: Option<[f64; 3]> = None;
     let mut shapes: Option<[field::SpecShape; 3]> = None;
-    let mut args = std::env::args().skip(1);
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    // Autosaved config loads as the base so explicit flags still override.
+    // Interactive runs only: headless/grad-check experiments and preset dumps
+    // must not silently pick up mutable state.
+    let skip_autosave = raw.iter().any(|a| {
+        matches!(
+            a.as_str(),
+            "--no-autosave" | "--headless" | "--grad-check" | "--save-preset"
+        )
+    });
+    if !skip_autosave {
+        if let Ok(text) = std::fs::read_to_string(preset::autosave_path()) {
+            if preset::apply_json(
+                &text,
+                &mut opts.face,
+                &mut opts.sim,
+                &mut opts.style,
+                &mut opts.speed,
+            )
+            .is_ok()
+            {
+                opts.autosave = true;
+            }
+        }
+    }
+    let mut args = raw.into_iter();
     let value = |name: &str, args: &mut dyn Iterator<Item = String>| {
         args.next().ok_or(format!("{name} needs a value"))
     };
@@ -378,6 +414,8 @@ fn parse_args() -> Result<Options, String> {
                 );
             }
             "--transparent-bg" => opts.style.transparent_bg = true,
+            "--autosave" => opts.autosave = true,
+            "--no-autosave" => opts.autosave = false,
             "--kiosk" => {
                 opts.fullscreen = true;
                 opts.show_panel = false;
@@ -588,6 +626,7 @@ fn main() -> ExitCode {
                 opts.sim,
                 opts.face,
                 opts.show_panel,
+                opts.autosave,
                 None,
             )))
         }),

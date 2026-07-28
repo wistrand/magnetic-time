@@ -61,7 +61,10 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     #   --pad F (margin around the dial per side, 0..0.45 of short side)
                                     #   --transparent-bg (alpha-0 outside the dial: circular window
                                     #     look under a compositor; PNG dumps get transparent corners)
-                                    #   --kiosk (= --fullscreen --no-controls --no-dev-panel)
+                                    #   --kiosk (= --fullscreen --no-dev-panel)
+                                    #   --autosave (persist config changes to
+                                    #     ~/.config/magnetic-time/autosave.json, reload next start;
+                                    #     also a dev panel checkbox; --no-autosave ignores the file)
                                     #   --fps (interactive: show frame-rate overlay)
                                     #   --mobility F --max-speed F --noise F --repulsion F
                                     #   --face hands|seg|seg-hms|tide (hands, 7-seg digital, or concentric tide arcs)

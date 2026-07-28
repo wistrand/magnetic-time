@@ -73,6 +73,7 @@ impl WebHandle {
                         cfg.sim,
                         cfg.face,
                         cfg.show_panel,
+                        false,
                         Some(pending),
                     )))
                 }),

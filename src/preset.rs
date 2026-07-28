@@ -415,3 +415,14 @@ pub fn apply_json(
 
     Ok(())
 }
+
+/// Autosave file location: ~/.config/magnetic-time/autosave.json (working
+/// directory fallback without HOME). The file's presence means autosave is
+/// enabled; disabling autosave deletes it.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn autosave_path() -> std::path::PathBuf {
+    match std::env::var_os("HOME") {
+        Some(h) => std::path::Path::new(&h).join(".config/magnetic-time/autosave.json"),
+        None => std::path::PathBuf::from("magnetic-time-autosave.json"),
+    }
+}

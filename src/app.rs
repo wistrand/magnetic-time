@@ -60,6 +60,16 @@ pub struct ClockApp {
     /// result message.
     preset_path: String,
     preset_status: Option<String>,
+    /// Persist config changes to preset::autosave_path() (throttled, on
+    /// change) so the next start restores them. Native only.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    autosave: bool,
+    /// Frames since the last autosave check (throttle counter).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    autosave_frames: u32,
+    /// Last JSON written, to skip redundant disk writes.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    autosave_last: String,
 }
 
 impl ClockApp {
@@ -70,6 +80,7 @@ impl ClockApp {
         params: SimParams,
         face_cfg: FaceConfigs,
         show_panel: bool,
+        autosave: bool,
         pending: Option<PendingConfig>,
     ) -> Self {
         let speed = clock.multiplier();
@@ -93,6 +104,9 @@ impl ClockApp {
             dump_status: None,
             preset_path: "preset.json".to_string(),
             preset_status: None,
+            autosave,
+            autosave_frames: 0,
+            autosave_last: String::new(),
         }
     }
 
@@ -184,6 +198,32 @@ impl ClockApp {
             Ok(()) => format!("wrote {}", path.display()),
             Err(e) => format!("dump failed: {e}"),
         });
+    }
+
+    /// Throttled write of the current config to the autosave file, skipped
+    /// when nothing changed. ~2s at 60fps; frame-count based so no wall time.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn autosave_tick(&mut self) {
+        if !self.autosave {
+            return;
+        }
+        self.autosave_frames += 1;
+        if self.autosave_frames < 120 {
+            return;
+        }
+        self.autosave_frames = 0;
+        let json =
+            crate::preset::to_json(&self.face_cfg, &self.sim.params, &self.style, self.speed);
+        if json == self.autosave_last {
+            return;
+        }
+        let path = crate::preset::autosave_path();
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if std::fs::write(&path, &json).is_ok() {
+            self.autosave_last = json;
+        }
     }
 
     fn dev_panel(&mut self, ctx: &egui::Context) {
@@ -446,6 +486,15 @@ impl ClockApp {
             });
             if let Some(status) = &self.preset_status {
                 ui.label(status.clone());
+            }
+            if ui.checkbox(&mut self.autosave, "autosave").changed() {
+                if self.autosave {
+                    // Write promptly on enable; the tick handles the rest.
+                    self.autosave_frames = 119;
+                } else {
+                    let _ = std::fs::remove_file(crate::preset::autosave_path());
+                    self.autosave_last.clear();
+                }
             }
         }
         ui.horizontal(|ui| {
@@ -777,6 +826,9 @@ impl eframe::App for ClockApp {
                     }
                 }
             });
+
+        #[cfg(not(target_arch = "wasm32"))]
+        self.autosave_tick();
 
         // Idle egui repaints only on input; without this the clock freezes.
         ctx.request_repaint();
