@@ -47,54 +47,18 @@ cargo run --release -- --headless --time 10:08:30 --sim-seconds 60 --dump out.pn
                                     # --dump-positions out.csv: also write particle
                                     #   positions + local field (measurement scripts;
                                     #   image-based estimators fuse overlapping dots)
-                                    # more flags: --view field,quiver,dipoles,velocity,hash,chains
-                                    #   --preset FILE.json (load), --save-preset FILE.json (dump config + exit)
-                                    #   --particles N --seed N --size PX --stroke-len F
-                                    #   --palette NAME|startHex-endHex --bg RRGGBB
-                                    #     (color ramp start -> end in OKLab; NAME =
-                                    #      ice|ember|emerald|violet|mono; bg separate)
-                                    #   --max-px N (interactive resolution cap, 0 = off)
-                                    #   --heatmap N (density heatmap, NxN grid, instead of strokes; 0 = strokes)
-                                    #   --no-dev-panel (interactive: start with dev panel hidden)
-                                    #   --fullscreen (interactive: borderless fullscreen, Esc quits)
-                                    #   --window-size WxH (interactive window size, default 1000x820)
-                                    #   --pad F (margin around the dial per side, 0..0.45 of short side)
-                                    #   --transparent-bg (alpha-0 outside the dial: circular window
-                                    #     look under a compositor; PNG dumps get transparent corners)
-                                    #   --kiosk (= --fullscreen --no-dev-panel)
-                                    #   --autosave (persist config changes to
-                                    #     ~/.config/magnetic-time/autosave.json, reload next start;
-                                    #     also a dev panel checkbox; --no-autosave ignores the file)
-                                    #   --fps (interactive: show frame-rate overlay)
-                                    #   --mobility F --max-speed F --noise F --repulsion F
-                                    #   --face hands|seg|seg-hms|tide (hands, 7-seg digital, or concentric tide arcs)
-                                    #   --seg-strength F (per-segment bar strength, seg faces)
-                                    #   --tide-strength F (per-arc bar strength, tide face)
-                                    #   --magnets tip|strip:N|alt:N (one value, or hour,minute,second)
-                                    #   --strengths F (one value, or hour,minute,second)
-                                    #   --shapes point|disc:R|rect:FxW (one value, or hour,minute,second;
-                                    #     F = bar length as fraction of hand length, 0..2, 1 = full hand)
-                                    #   --chain-strength F --chain-spacing F --chain-range F
-                                    #   --chain-compress F --chain-speed-cap F --chain-neighbors N
-                                    #   --chain-cone DEG (experimental probe, 0 = off)
-                                    #   --repulsion-radius F --dt F --field-clamp F --drag F
-                                    #   --fluid-scale F (band-size dial; similarity transform
-                                    #     of the microphysics, wavelength scales linearly)
-                                    #   --pointer-strength F --pointer-radius F --pointer-visual F
-                                    #     (touch/mouse magnet; visual = weight in stroke color)
-                                    #   --pointer-repel (touch/mouse magnet repels instead of attracts)
 magnetic-time --grad-check          # verify analytic field gradient vs numeric; run after
                                     # changing field elements (honors --magnets/--shapes)
-                                    # headless two-phase runs (hysteresis experiments):
-                                    #   --anneal-from F --anneal-for SECONDS
 cargo check                         # compile check; do not run cargo test
 cargo check --target wasm32-unknown-unknown   # browser build must stay green
 ./scripts/build-web.sh              # build wasm into docs/app/pkg/ (installs a
                                     # matching wasm-bindgen-cli; owner runs this)
 ```
 
-Keep this block in sync with the CLI (USAGE in `src/main.rs` is the full
-reference).
+USAGE in `src/main.rs` is the flag reference (sim tunables, faces/magnets,
+window/kiosk modes, presets, autosave, palettes, debug views); keep it in
+sync when changing the CLI. `bin/` has kiosk launch and autosave-clean
+scripts.
 
 ## Docs
 
