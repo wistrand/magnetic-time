@@ -38,6 +38,12 @@ pub struct ClockApp {
     views: DebugViews,
     style: Style,
     show_panel: bool,
+    /// Draw the dev panel as a floating overlay over the dial instead of a
+    /// side panel, so opening it does not resize the clock.
+    panel_overlap: bool,
+    /// Screen rect of the overlay panel this frame (None when hidden or in
+    /// side-panel mode); the pointer magnet and hotspot ignore clicks here.
+    panel_rect: Option<egui::Rect>,
     /// External config updates, drained each frame.
     pending: Option<PendingConfig>,
     /// Active pointer magnet: position in clock units plus screen position
@@ -76,6 +82,8 @@ impl ClockApp {
             views,
             style,
             show_panel,
+            panel_overlap: false,
+            panel_rect: None,
             pending,
             pointer: None,
             sim: Sim::new(params),
@@ -179,14 +187,28 @@ impl ClockApp {
     }
 
     fn dev_panel(&mut self, ctx: &egui::Context) {
-        egui::SidePanel::right("dev")
-            .resizable(false)
-            .default_width(180.0)
-            .show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.dev_panel_contents(ui);
+        if self.panel_overlap {
+            let r = egui::Window::new("dev")
+                .anchor(egui::Align2::RIGHT_TOP, egui::Vec2::ZERO)
+                .title_bar(false)
+                .resizable(false)
+                .fixed_size(egui::vec2(180.0, ctx.screen_rect().height()))
+                .show(ctx, |ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        self.dev_panel_contents(ui);
+                    });
                 });
-            });
+            self.panel_rect = r.map(|r| r.response.rect);
+        } else {
+            egui::SidePanel::right("dev")
+                .resizable(false)
+                .default_width(180.0)
+                .show(ctx, |ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        self.dev_panel_contents(ui);
+                    });
+                });
+        }
     }
 
     /// Per-hand magnet layout controls (hands face). Returns whether any
@@ -306,7 +328,10 @@ impl ClockApp {
     }
 
     fn dev_panel_contents(&mut self, ui: &mut egui::Ui) {
-        ui.heading("dev");
+        ui.horizontal(|ui| {
+            ui.heading("dev");
+            ui.checkbox(&mut self.panel_overlap, "overlay");
+        });
         ui.label(format!("time  {}", format_time(self.clock.now())));
         ui.add(
             egui::Slider::new(&mut self.speed, 0.1..=10000.0)
@@ -609,6 +634,7 @@ impl eframe::App for ClockApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
+        self.panel_rect = None;
         if self.show_panel {
             self.dev_panel(ctx);
         }
@@ -672,10 +698,16 @@ impl eframe::App for ClockApp {
                 // the tap does not stir the particles.
                 let in_hotspot =
                     |w: Vec2| (w - Vec2::new(0.0, -0.9)).len() < 0.15;
+                // In overlay mode the panel floats over the dial; clicks on
+                // it belong to the panel, not the hotspot or the magnet.
+                let panel_rect = self.panel_rect;
+                let over_panel = move |pos: egui::Pos2| {
+                    panel_rect.is_some_and(|r| r.contains(pos))
+                };
 
                 if ctx.input(|i| i.pointer.primary_clicked()) {
                     if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
-                        if avail.contains(pos) && in_hotspot(to_world(pos)) {
+                        if avail.contains(pos) && !over_panel(pos) && in_hotspot(to_world(pos)) {
                             self.show_panel = !self.show_panel;
                         }
                     }
@@ -686,7 +718,7 @@ impl eframe::App for ClockApp {
                         return None;
                     }
                     let pos = i.pointer.interact_pos()?;
-                    if !avail.contains(pos) {
+                    if !avail.contains(pos) || over_panel(pos) {
                         return None;
                     }
                     let world = to_world(pos);
