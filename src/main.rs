@@ -58,6 +58,10 @@ struct Options {
     autosave: bool,
     /// Start borderless fullscreen (interactive).
     fullscreen: bool,
+    /// --kiosk was given; applies its defaults (outside_bg black) after
+    /// parsing so explicit flags and autosaved values win regardless of
+    /// flag order.
+    kiosk: bool,
     /// Initial window inner size in points (interactive, windowed mode).
     window_size: (f32, f32),
     /// Verify the analytic gradient against central differences and exit.
@@ -88,6 +92,7 @@ impl Default for Options {
             show_panel: true,
             autosave: false,
             fullscreen: false,
+            kiosk: false,
             window_size: (1000.0, 820.0),
             grad_check: false,
             anneal_from: 0.0,
@@ -106,6 +111,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--palette NAME|startHex-endHex] [--bg RRGGBB]  particle
                      color ramp (start -> end, OKLab); NAME = ice|ember|emerald|
                      violet|mono preset. Background is separate.
+                     [--outside-bg RRGGBB]  fill outside the dial disc (default
+                     --bg; does not feed the theme; --transparent-bg wins)
                      [--max-px N]  cap interactive render resolution (0 = off)
                      [--heatmap N]  render particles as an NxN density heatmap
                      instead of strokes (0 = strokes; cheap, cluster-proof)
@@ -122,7 +129,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      compositor only the circular dial is visible (clicks in
                      the corners still hit the window). Headless PNGs get
                      transparent corners.
-                     [--kiosk]  shorthand for --fullscreen --no-dev-panel
+                     [--kiosk]  shorthand for --fullscreen --no-dev-panel;
+                     defaults --outside-bg to 000000 when not set otherwise
                      [--autosave]  save config changes to
                      ~/.config/magnetic-time/autosave.json and reload them on
                      the next start (also a dev panel checkbox; flags override
@@ -384,6 +392,10 @@ fn parse_args() -> Result<Options, String> {
                 opts.style.palette = render::Palette::parse(&value("--palette", &mut args)?)?
             }
             "--bg" => opts.style.bg = render::parse_color(&value("--bg", &mut args)?)?,
+            "--outside-bg" => {
+                opts.style.outside_bg =
+                    Some(render::parse_color(&value("--outside-bg", &mut args)?)?)
+            }
             "--max-px" => {
                 opts.style.max_px = value("--max-px", &mut args)?
                     .parse()
@@ -419,6 +431,7 @@ fn parse_args() -> Result<Options, String> {
             "--kiosk" => {
                 opts.fullscreen = true;
                 opts.show_panel = false;
+                opts.kiosk = true;
             }
             "--fps" => opts.style.show_fps = true,
             "--pointer-repel" => opts.sim.pointer_repel = true,
@@ -446,6 +459,9 @@ fn parse_args() -> Result<Options, String> {
         for (spec, shape) in opts.face.hands.iter_mut().zip(s) {
             spec.shape = shape;
         }
+    }
+    if opts.kiosk && opts.style.outside_bg.is_none() {
+        opts.style.outside_bg = Some([0, 0, 0]);
     }
     if opts.headless && opts.dump.is_none() {
         return Err("--headless requires --dump PATH".to_string());

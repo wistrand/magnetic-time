@@ -516,6 +516,15 @@ impl ClockApp {
             ui.color_edit_button_srgb(&mut self.style.bg);
         });
         ui.horizontal(|ui| {
+            let mut on = self.style.outside_bg.is_some();
+            if ui.checkbox(&mut on, "outside bg").changed() {
+                self.style.outside_bg = on.then_some(self.style.bg);
+            }
+            if let Some(c) = &mut self.style.outside_bg {
+                ui.color_edit_button_srgb(c);
+            }
+        });
+        ui.horizontal(|ui| {
             ui.label("preset");
             for (name, p) in crate::render::Palette::PRESETS {
                 if ui.small_button(name).clicked() {
@@ -710,7 +719,7 @@ impl eframe::App for ClockApp {
                 });
         }
 
-        let bg = self.style.bg;
+        let bg = self.style.outside_bg.unwrap_or(self.style.bg);
         let fill = if self.style.transparent_bg {
             egui::Color32::TRANSPARENT
         } else {

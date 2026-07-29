@@ -211,6 +211,9 @@ pub struct Style {
     /// Background color; all face colors and the particle blend mode derive
     /// from it (see Theme).
     pub bg: [u8; 3],
+    /// Fill outside the dial disc; None = bg. Does not feed the theme.
+    /// transparent_bg takes precedence.
+    pub outside_bg: Option<[u8; 3]>,
     /// Interactive render-buffer cap (pixels per side); 0 = native
     /// resolution. The texture upscales linearly, trading sharpness for
     /// raster cost. Headless --size is unaffected.
@@ -242,6 +245,7 @@ impl Default for Style {
             show_hands: false,
             palette: Palette::default(),
             bg: DEFAULT_BG,
+            outside_bg: None,
             max_px: 700,
             show_fps: false,
             heatmap_res: 0,
@@ -503,6 +507,8 @@ pub fn draw_clock(
     let theme = Theme::from_bg(style.bg, style.palette);
     if style.transparent_bg {
         fb.clear([0, 0, 0, 0]);
+    } else if let Some([r, g, b]) = style.outside_bg {
+        fb.clear([r, g, b, 255]);
     } else {
         fb.clear(theme.bg);
     }
