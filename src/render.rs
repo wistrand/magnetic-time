@@ -209,6 +209,9 @@ pub struct Style {
     /// Draw the static face (dial disc, rim, ticks). Off leaves only the
     /// background fill under the particles.
     pub show_face: bool,
+    /// View rotation in degrees, clockwise (static; mounting orientation).
+    /// Pure presentation: sim, field, and dumped positions stay unrotated.
+    pub rotate: f64,
     /// Particle color scale.
     pub palette: Palette,
     /// Background color; all face colors and the particle blend mode derive
@@ -252,6 +255,7 @@ impl Default for Style {
             stroke_len: 0.6,
             show_hands: false,
             show_face: true,
+            rotate: 0.0,
             palette: Palette::default(),
             bg: DEFAULT_BG,
             outside_bg: None,
@@ -474,33 +478,47 @@ impl Framebuffer {
     }
 }
 
-/// Pixel mapping for clock-face units (center origin, dial radius 1.0).
+/// Pixel mapping for clock-face units (center origin, dial radius 1.0),
+/// with an optional view rotation (Style::rotate). Rotation is pure
+/// presentation: sim and field stay in unrotated world space.
 struct Map {
     cx: f64,
     cy: f64,
     r: f64,
+    /// cos/sin of the view rotation.
+    c: f64,
+    s: f64,
 }
 
 impl Map {
-    fn of(fb: &Framebuffer) -> Self {
+    fn of(fb: &Framebuffer, rotate_deg: f64) -> Self {
         let c = fb.width.min(fb.height) as f64 / 2.0;
+        let a = rotate_deg.to_radians();
         Self {
             cx: fb.width as f64 / 2.0,
             cy: fb.height as f64 / 2.0,
             r: c * 0.94,
+            c: a.cos(),
+            s: a.sin(),
         }
     }
 
-    fn px(&self, p: Vec2) -> (f64, f64) {
-        (self.cx + p.x * self.r, self.cy + p.y * self.r)
+    /// Rotate a world direction into view space.
+    fn rot_vec(&self, v: Vec2) -> Vec2 {
+        Vec2::new(v.x * self.c - v.y * self.s, v.x * self.s + v.y * self.c)
     }
 
-    /// Pixel center back to clock-face units.
+    fn px(&self, p: Vec2) -> (f64, f64) {
+        let rx = p.x * self.c - p.y * self.s;
+        let ry = p.x * self.s + p.y * self.c;
+        (self.cx + rx * self.r, self.cy + ry * self.r)
+    }
+
+    /// Pixel center back to clock-face units (inverse rotation applied).
     fn world(&self, x: usize, y: usize) -> Vec2 {
-        Vec2::new(
-            (x as f64 + 0.5 - self.cx) / self.r,
-            (y as f64 + 0.5 - self.cy) / self.r,
-        )
+        let dx = (x as f64 + 0.5 - self.cx) / self.r;
+        let dy = (y as f64 + 0.5 - self.cy) / self.r;
+        Vec2::new(dx * self.c + dy * self.s, -dx * self.s + dy * self.c)
     }
 }
 
@@ -527,6 +545,8 @@ struct FaceLayerKey {
     outside_bg: Option<[u8; 3]>,
     transparent_bg: bool,
     show_face: bool,
+    /// View rotation (moves the ticks).
+    rotate: f64,
     /// Ticks are drawn for the hands face only.
     ticks: bool,
 }
@@ -543,7 +563,7 @@ fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: b
     if !style.show_face {
         return;
     }
-    let m = Map::of(fb);
+    let m = Map::of(fb, style.rotate);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
 
     fb.disc(cx, cy, r, theme.dial);
@@ -552,8 +572,9 @@ fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: b
     // Analog ticks only under the hands; a digital face would read oddly with
     // minute ticks behind it.
     if ticks {
+        let rot = style.rotate.to_radians();
         for i in 0..60 {
-            let a = i as f64 / 60.0 * TAU - TAU / 4.0;
+            let a = i as f64 / 60.0 * TAU - TAU / 4.0 + rot;
             let (major, r0, hw) = if i % 5 == 0 {
                 (true, 0.88, r * 0.010)
             } else {
@@ -594,6 +615,7 @@ pub fn draw_clock(
                 outside_bg: style.outside_bg,
                 transparent_bg: style.transparent_bg,
                 show_face: style.show_face,
+                rotate: style.rotate,
                 ticks,
             };
             if layer.key != Some(key) {
@@ -607,7 +629,7 @@ pub fn draw_clock(
         }
         None => draw_face_statics(fb, &theme, style, ticks),
     }
-    let m = Map::of(fb);
+    let m = Map::of(fb, style.rotate);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
 
     if views.field {
@@ -624,8 +646,9 @@ pub fn draw_clock(
                 let widths = [r * 0.030, r * 0.020, r * 0.007];
                 let tails = [0.06, 0.06, 0.14];
                 let colors = [theme.hand, theme.hand, theme.second];
+                let rot = style.rotate.to_radians();
                 for i in 0..3 {
-                    let a = angles[i];
+                    let a = angles[i] + rot;
                     fb.capsule(
                         cx - a.cos() * r * tails[i],
                         cy - a.sin() * r * tails[i],
@@ -988,7 +1011,7 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
             let wv = field[i].w_disp;
             if wv > 0.15 && stroke_len > 0.0 {
                 let hl = pr * (1.2 + 2.6 * wv as f64) * stroke_len;
-                let d = field[i].dir.to_f64();
+                let d = m.rot_vec(field[i].dir.to_f64());
                 let (dx, dy) = (d.x * hl, d.y * hl);
                 let hw = pr * 0.6;
                 // Cull against this band before the colour lerp.

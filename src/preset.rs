@@ -117,6 +117,7 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     num_line(&mut e, "max_px", style.max_px as f64);
     num_line(&mut e, "heatmap_res", style.heatmap_res as f64);
     num_line(&mut e, "pad", style.pad);
+    num_line(&mut e, "rotate", style.rotate);
     e.push(format!("{}: {}", q("transparent_bg"), style.transparent_bg));
 
     let body = e
@@ -430,6 +431,11 @@ pub fn apply_json(
     }
     if let Some(v) = num("pad") {
         style.pad = v.clamp(0.0, 0.45);
+    }
+    if let Some(v) = num("rotate") {
+        if v.is_finite() {
+            style.rotate = v;
+        }
     }
     if let Some(v) = flag("transparent_bg") {
         style.transparent_bg = v;

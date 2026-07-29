@@ -661,6 +661,7 @@ impl ClockApp {
                     .text("res cap px (0 = off)"),
             );
             ui.add(egui::Slider::new(&mut self.style.pad, 0.0..=0.45).text("dial padding"));
+            ui.add(egui::Slider::new(&mut self.style.rotate, 0.0..=360.0).text("rotate deg"));
         });
 
         ui.separator();
@@ -761,11 +762,15 @@ impl eframe::App for ClockApp {
                 // Dial radius in points matches Map's 0.94 factor.
                 let dial_r_pts = side_pts / 2.0 * 0.94;
                 let center = avail.center();
-                let to_world = |pos: egui::Pos2| {
-                    Vec2::new(
-                        ((pos.x - center.x) / dial_r_pts) as f64,
-                        ((pos.y - center.y) / dial_r_pts) as f64,
-                    )
+                // Inverse of the view rotation: pointer positions must reach
+                // the sim in unrotated world space (the hotspot check then
+                // follows the rotated 12 o'clock tick for free).
+                let rot = self.style.rotate.to_radians();
+                let (rc, rs) = (rot.cos(), rot.sin());
+                let to_world = move |pos: egui::Pos2| {
+                    let dx = ((pos.x - center.x) / dial_r_pts) as f64;
+                    let dy = ((pos.y - center.y) / dial_r_pts) as f64;
+                    Vec2::new(dx * rc + dy * rs, -dx * rs + dy * rc)
                 };
                 // Hotspot around the 12 o'clock tick: tapping it toggles the
                 // dev panel (the only way in for the panel-less web
