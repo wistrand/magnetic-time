@@ -119,6 +119,9 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--hide-hands | --show-hands]  (default: hidden)
                      [--no-dev-panel]  start with the dev panel hidden
                      (interactive; tap the 12 o'clock tick to toggle)
+                     [--dev-overlay]  dev panel floats over the dial instead
+                     of docking, so opening it does not resize the clock
+                     (also a panel checkbox; persisted in presets)
                      [--fullscreen]  borderless fullscreen, no decorations
                      (interactive; Esc quits)
                      [--window-size WxH]  initial window size in points
@@ -129,14 +132,16 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      compositor only the circular dial is visible (clicks in
                      the corners still hit the window). Headless PNGs get
                      transparent corners.
-                     [--kiosk]  shorthand for --fullscreen --no-dev-panel;
-                     defaults --outside-bg to 000000 when not set otherwise
+                     [--kiosk]  shorthand for --fullscreen --no-dev-panel
+                     --dev-overlay; defaults --outside-bg to 000000 when not
+                     set otherwise, and centers the fps overlay when shown
                      [--autosave]  save config changes to
                      ~/.config/magnetic-time/autosave.json and reload them on
                      the next start (also a dev panel checkbox; flags override
                      the loaded values)
                      [--no-autosave]  ignore the autosave file this run
                      [--fps]  show a frame-rate overlay (interactive)
+                     [--fps-center]  the overlay at top center (implies --fps)
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
                      [--chain-neighbors N] [--dt F] [--field-clamp F] [--fluid-scale F]
@@ -409,6 +414,7 @@ fn parse_args() -> Result<Options, String> {
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
             "--no-dev-panel" => opts.show_panel = false,
+            "--dev-overlay" => opts.style.panel_overlay = true,
             "--pad" => {
                 opts.style.pad = value("--pad", &mut args)?
                     .parse()
@@ -431,9 +437,15 @@ fn parse_args() -> Result<Options, String> {
             "--kiosk" => {
                 opts.fullscreen = true;
                 opts.show_panel = false;
+                opts.style.panel_overlay = true;
+                opts.style.fps_center = true;
                 opts.kiosk = true;
             }
             "--fps" => opts.style.show_fps = true,
+            "--fps-center" => {
+                opts.style.show_fps = true;
+                opts.style.fps_center = true;
+            }
             "--pointer-repel" => opts.sim.pointer_repel = true,
             "--grad-check" => opts.grad_check = true,
             "--anneal-from" => {

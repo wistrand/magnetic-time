@@ -38,9 +38,6 @@ pub struct ClockApp {
     views: DebugViews,
     style: Style,
     show_panel: bool,
-    /// Draw the dev panel as a floating overlay over the dial instead of a
-    /// side panel, so opening it does not resize the clock.
-    panel_overlap: bool,
     /// Screen rect of the overlay panel this frame (None when hidden or in
     /// side-panel mode); the pointer magnet and hotspot ignore clicks here.
     panel_rect: Option<egui::Rect>,
@@ -93,7 +90,6 @@ impl ClockApp {
             views,
             style,
             show_panel,
-            panel_overlap: false,
             panel_rect: None,
             pending,
             pointer: None,
@@ -227,7 +223,7 @@ impl ClockApp {
     }
 
     fn dev_panel(&mut self, ctx: &egui::Context) {
-        if self.panel_overlap {
+        if self.style.panel_overlay {
             let r = egui::Window::new("dev")
                 .anchor(egui::Align2::RIGHT_TOP, egui::Vec2::ZERO)
                 .title_bar(false)
@@ -370,7 +366,7 @@ impl ClockApp {
     fn dev_panel_contents(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.heading("dev");
-            ui.checkbox(&mut self.panel_overlap, "overlay");
+            ui.checkbox(&mut self.style.panel_overlay, "overlay");
         });
         ui.label(format!("time  {}", format_time(self.clock.now())));
         ui.add(
@@ -500,6 +496,7 @@ impl ClockApp {
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.style.show_hands, "show hands/magnets");
             ui.checkbox(&mut self.style.show_fps, "fps");
+            ui.checkbox(&mut self.style.fps_center, "centered");
         });
         ui.add(egui::Slider::new(&mut self.style.stroke_len, 0.0..=4.0).text("stroke length"));
         ui.add(
@@ -701,8 +698,13 @@ impl eframe::App for ClockApp {
             // egui's smoothed frame time; overlaid as a corner label (the
             // pixel buffer has no text). Floats above the clock, panel or not.
             let fps = 1.0 / ctx.input(|i| i.stable_dt).max(1e-6);
+            let (align, offset) = if self.style.fps_center {
+                (egui::Align2::CENTER_TOP, egui::vec2(0.0, 6.0))
+            } else {
+                (egui::Align2::LEFT_TOP, egui::vec2(6.0, 6.0))
+            };
             egui::Area::new(egui::Id::new("fps_overlay"))
-                .anchor(egui::Align2::LEFT_TOP, egui::vec2(6.0, 6.0))
+                .anchor(align, offset)
                 .interactable(false)
                 .show(ctx, |ui| {
                     // Fixed width (right-padded to 3 digits) and no wrapping so

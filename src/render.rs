@@ -221,6 +221,11 @@ pub struct Style {
     /// Draw a smoothed FPS overlay (interactive only; egui text, not the
     /// pixel buffer).
     pub show_fps: bool,
+    /// Anchor the FPS overlay top center instead of the top-left corner.
+    pub fps_center: bool,
+    /// Dev panel floats over the dial instead of docking as a side panel,
+    /// so opening it does not resize the clock (interactive only).
+    pub panel_overlay: bool,
     /// Render particles as a density heatmap of this grid resolution (cells
     /// per side) instead of strokes; 0 = strokes. Cost is O(particles) to
     /// count plus O(pixels) to colorize, independent of clustering (a dense
@@ -248,6 +253,8 @@ impl Default for Style {
             outside_bg: None,
             max_px: 700,
             show_fps: false,
+            fps_center: false,
+            panel_overlay: false,
             heatmap_res: 0,
             pad: 0.0,
             transparent_bg: false,
