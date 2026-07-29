@@ -224,15 +224,19 @@ impl ClockApp {
 
     fn dev_panel(&mut self, ctx: &egui::Context) {
         if self.style.panel_overlay {
+            // Draggable by the title bar; position is remembered for the
+            // session (egui memory), not across restarts.
+            let screen = ctx.screen_rect();
             let r = egui::Window::new("dev")
-                .anchor(egui::Align2::RIGHT_TOP, egui::Vec2::ZERO)
-                .title_bar(false)
+                .default_pos(screen.right_top() + egui::vec2(-200.0, 8.0))
+                .default_width(180.0)
                 .resizable(false)
-                .fixed_size(egui::vec2(180.0, ctx.screen_rect().height()))
                 .show(ctx, |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        self.dev_panel_contents(ui);
-                    });
+                    egui::ScrollArea::vertical()
+                        .max_height(screen.height() * 0.8)
+                        .show(ui, |ui| {
+                            self.dev_panel_contents(ui);
+                        });
                 });
             self.panel_rect = r.map(|r| r.response.rect);
         } else {
