@@ -47,7 +47,7 @@ fn luminance(c: [u8; 3]) -> f32 {
 }
 
 impl Theme {
-    fn from_bg(bg: [u8; 3], palette: Palette) -> Self {
+    fn from_bg(bg: [u8; 3], palette: Palette, face_color: Option<[u8; 3]>) -> Self {
         let lum = luminance(bg);
         let dark = lum < 128.0;
         let target = if dark { 255.0 } else { 0.0 };
@@ -55,12 +55,25 @@ impl Theme {
             let c = bg.map(|v| (v as f32 + (target - v as f32) * t) as u8);
             [c[0], c[1], c[2], 255]
         };
+        // Rim and ticks: fade from bg toward the configured face color when
+        // set (same weights as the contrast fades), else toward black/white.
+        let accent = |t: f32| -> Color {
+            match face_color {
+                Some(fc) => {
+                    let c = |i: usize| {
+                        (bg[i] as f32 + (fc[i] as f32 - bg[i] as f32) * t) as u8
+                    };
+                    [c(0), c(1), c(2), 255]
+                }
+                None => toward(t),
+            }
+        };
         Self {
             bg: [bg[0], bg[1], bg[2], 255],
             dial: toward(0.05),
-            rim: toward(0.35),
-            tick_major: toward(0.68),
-            tick_minor: toward(0.38),
+            rim: accent(0.35),
+            tick_major: accent(0.68),
+            tick_minor: accent(0.38),
             hand: toward(0.88),
             second: if dark {
                 [225, 75, 60, 255]
@@ -220,6 +233,9 @@ pub struct Style {
     /// Fill outside the dial disc; None = bg. Does not feed the theme.
     /// transparent_bg takes precedence.
     pub outside_bg: Option<[u8; 3]>,
+    /// Rim ring and tick color; the major/minor/rim variants fade from bg
+    /// toward it. None = derive from bg contrast (the default look).
+    pub face_color: Option<[u8; 3]>,
     /// Interactive render-buffer cap (pixels per side); 0 = native
     /// resolution. The texture upscales linearly, trading sharpness for
     /// raster cost. Headless --size is unaffected.
@@ -259,6 +275,7 @@ impl Default for Style {
             palette: Palette::default(),
             bg: DEFAULT_BG,
             outside_bg: None,
+            face_color: None,
             max_px: 700,
             show_fps: false,
             fps_center: false,
@@ -543,6 +560,7 @@ struct FaceLayerKey {
     h: u32,
     bg: [u8; 3],
     outside_bg: Option<[u8; 3]>,
+    face_color: Option<[u8; 3]>,
     transparent_bg: bool,
     show_face: bool,
     /// View rotation (moves the ticks).
@@ -604,7 +622,7 @@ pub fn draw_clock(
     sim: Option<&Sim>,
     cache: Option<&mut FaceLayer>,
 ) {
-    let theme = Theme::from_bg(style.bg, style.palette);
+    let theme = Theme::from_bg(style.bg, style.palette, style.face_color);
     let ticks = matches!(face, Face::Hands(_));
     match cache {
         Some(layer) => {
@@ -613,6 +631,7 @@ pub fn draw_clock(
                 h: fb.height,
                 bg: style.bg,
                 outside_bg: style.outside_bg,
+                face_color: style.face_color,
                 transparent_bg: style.transparent_bg,
                 show_face: style.show_face,
                 rotate: style.rotate,

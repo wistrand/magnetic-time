@@ -537,6 +537,15 @@ impl ClockApp {
             }
         });
         ui.horizontal(|ui| {
+            let mut on = self.style.face_color.is_some();
+            if ui.checkbox(&mut on, "face color").changed() {
+                self.style.face_color = on.then_some([128, 128, 128]);
+            }
+            if let Some(c) = &mut self.style.face_color {
+                ui.color_edit_button_srgb(c);
+            }
+        });
+        ui.horizontal(|ui| {
             ui.label("preset");
             for (name, p) in crate::render::Palette::PRESETS {
                 if ui.small_button(name).clicked() {

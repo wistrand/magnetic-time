@@ -108,6 +108,8 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     // "" = none (use bg), so disabling round-trips.
     let outside = style.outside_bg.map(&hex).unwrap_or_default();
     e.push(format!("{}: {}", q("outside_bg"), q(&outside)));
+    let face_color = style.face_color.map(&hex).unwrap_or_default();
+    e.push(format!("{}: {}", q("face_color"), q(&face_color)));
     num_line(&mut e, "stroke_len", style.stroke_len);
     e.push(format!("{}: {}", q("show_hands"), style.show_hands));
     e.push(format!("{}: {}", q("show_face"), style.show_face));
@@ -400,6 +402,13 @@ pub fn apply_json(
     }
     if let Some(v) = text("outside_bg") {
         style.outside_bg = if v.is_empty() {
+            None
+        } else {
+            parse_color(v).ok()
+        };
+    }
+    if let Some(v) = text("face_color") {
+        style.face_color = if v.is_empty() {
             None
         } else {
             parse_color(v).ok()

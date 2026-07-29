@@ -113,6 +113,9 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      violet|mono preset. Background is separate.
                      [--outside-bg RRGGBB]  fill outside the dial disc (default
                      --bg; does not feed the theme; --transparent-bg wins)
+                     [--face-color RRGGBB]  rim ring and tick color; the rim/
+                     major/minor variants fade from bg toward it (default:
+                     derived from bg contrast)
                      [--max-px N]  cap interactive render resolution (0 = off)
                      [--heatmap N]  render particles as an NxN density heatmap
                      instead of strokes (0 = strokes; cheap, cluster-proof)
@@ -404,6 +407,10 @@ fn parse_args() -> Result<Options, String> {
             "--outside-bg" => {
                 opts.style.outside_bg =
                     Some(render::parse_color(&value("--outside-bg", &mut args)?)?)
+            }
+            "--face-color" => {
+                opts.style.face_color =
+                    Some(render::parse_color(&value("--face-color", &mut args)?)?)
             }
             "--max-px" => {
                 opts.style.max_px = value("--max-px", &mut args)?
