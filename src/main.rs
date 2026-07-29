@@ -117,6 +117,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--heatmap N]  render particles as an NxN density heatmap
                      instead of strokes (0 = strokes; cheap, cluster-proof)
                      [--hide-hands | --show-hands]  (default: hidden)
+                     [--no-face]  hide the static face (dial disc, rim,
+                     ticks); only the background fill under the particles
                      [--no-dev-panel]  start with the dev panel hidden
                      (interactive; tap the 12 o'clock tick to toggle)
                      [--dev-overlay]  dev panel floats over the dial instead
@@ -413,6 +415,7 @@ fn parse_args() -> Result<Options, String> {
             }
             "--hide-hands" => opts.style.show_hands = false,
             "--show-hands" => opts.style.show_hands = true,
+            "--no-face" => opts.style.show_face = false,
             "--no-dev-panel" => opts.show_panel = false,
             "--dev-overlay" => opts.style.panel_overlay = true,
             "--pad" => {

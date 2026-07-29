@@ -110,6 +110,7 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     e.push(format!("{}: {}", q("outside_bg"), q(&outside)));
     num_line(&mut e, "stroke_len", style.stroke_len);
     e.push(format!("{}: {}", q("show_hands"), style.show_hands));
+    e.push(format!("{}: {}", q("show_face"), style.show_face));
     e.push(format!("{}: {}", q("show_fps"), style.show_fps));
     e.push(format!("{}: {}", q("fps_center"), style.fps_center));
     e.push(format!("{}: {}", q("panel_overlay"), style.panel_overlay));
@@ -408,6 +409,9 @@ pub fn apply_json(
     }
     if let Some(v) = flag("show_hands") {
         style.show_hands = v;
+    }
+    if let Some(v) = flag("show_face") {
+        style.show_face = v;
     }
     if let Some(v) = flag("show_fps") {
         style.show_fps = v;

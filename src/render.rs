@@ -206,6 +206,9 @@ pub struct Style {
     pub stroke_len: f64,
     /// Draw the hands and hub (the field ignores this; magnets keep moving).
     pub show_hands: bool,
+    /// Draw the static face (dial disc, rim, ticks). Off leaves only the
+    /// background fill under the particles.
+    pub show_face: bool,
     /// Particle color scale.
     pub palette: Palette,
     /// Background color; all face colors and the particle blend mode derive
@@ -248,6 +251,7 @@ impl Default for Style {
         Self {
             stroke_len: 0.6,
             show_hands: false,
+            show_face: true,
             palette: Palette::default(),
             bg: DEFAULT_BG,
             outside_bg: None,
@@ -522,6 +526,7 @@ struct FaceLayerKey {
     bg: [u8; 3],
     outside_bg: Option<[u8; 3]>,
     transparent_bg: bool,
+    show_face: bool,
     /// Ticks are drawn for the hands face only.
     ticks: bool,
 }
@@ -534,6 +539,9 @@ fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: b
         fb.clear([r, g, b, 255]);
     } else {
         fb.clear(theme.bg);
+    }
+    if !style.show_face {
+        return;
     }
     let m = Map::of(fb);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
@@ -585,6 +593,7 @@ pub fn draw_clock(
                 bg: style.bg,
                 outside_bg: style.outside_bg,
                 transparent_bg: style.transparent_bg,
+                show_face: style.show_face,
                 ticks,
             };
             if layer.key != Some(key) {

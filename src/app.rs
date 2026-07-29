@@ -509,6 +509,7 @@ impl ClockApp {
         }
         ui.horizontal(|ui| {
             ui.checkbox(&mut self.style.show_hands, "show hands/magnets");
+            ui.checkbox(&mut self.style.show_face, "face");
             ui.checkbox(&mut self.style.show_fps, "fps");
             ui.checkbox(&mut self.style.fps_center, "centered");
         });
