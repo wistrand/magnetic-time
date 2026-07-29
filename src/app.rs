@@ -229,17 +229,23 @@ impl ClockApp {
             // edge, vertically centered.
             let screen = ctx.screen_rect();
             let max_h = screen.height() * 0.8;
+            // Title-bar close button; same effect as the 12 o'clock tap.
+            let mut open = true;
             let r = egui::Window::new("dev")
                 .pivot(egui::Align2::RIGHT_CENTER)
                 .default_pos(egui::pos2(screen.right() - 20.0, screen.center().y))
                 .default_width(180.0)
                 .resizable(false)
+                .open(&mut open)
                 .show(ctx, |ui| {
                     egui::ScrollArea::vertical().max_height(max_h).show(ui, |ui| {
                         self.dev_panel_contents(ui);
                     });
                 });
             self.panel_rect = r.map(|r| r.response.rect);
+            if !open {
+                self.show_panel = false;
+            }
         } else {
             egui::SidePanel::right("dev")
                 .resizable(false)
