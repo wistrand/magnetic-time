@@ -137,9 +137,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      the corners still hit the window). Headless PNGs get
                      transparent corners.
                      [--kiosk]  shorthand for --fullscreen --no-dev-panel
-                     --dev-overlay; defaults --outside-bg to 000000 and
-                     --rotate to 180 when not set otherwise, and centers the
-                     fps overlay when shown
+                     --dev-overlay; defaults --outside-bg to 000000 when not
+                     set otherwise, and centers the fps overlay when shown
                      [--autosave]  save config changes to
                      ~/.config/magnetic-time/autosave.json and reload them on
                      the next start (also a dev panel checkbox; flags override
@@ -183,8 +182,6 @@ fn parse_args() -> Result<Options, String> {
     // Applied after the loop so --strengths/--shapes work in any flag order.
     let mut strengths: Option<[f64; 3]> = None;
     let mut shapes: Option<[field::SpecShape; 3]> = None;
-    // --rotate was given; --kiosk only defaults rotate when it was not.
-    let mut rotate_explicit = false;
     let raw: Vec<String> = std::env::args().skip(1).collect();
     // Autosaved config loads as the base so explicit flags still override.
     // Interactive runs only: headless/grad-check experiments and preset dumps
@@ -424,8 +421,7 @@ fn parse_args() -> Result<Options, String> {
             "--rotate" => {
                 opts.style.rotate = value("--rotate", &mut args)?
                     .parse()
-                    .map_err(|e| format!("--rotate: {e}"))?;
-                rotate_explicit = true;
+                    .map_err(|e| format!("--rotate: {e}"))?
             }
             "--no-dev-panel" => opts.show_panel = false,
             "--dev-overlay" => opts.style.panel_overlay = true,
@@ -488,11 +484,6 @@ fn parse_args() -> Result<Options, String> {
     }
     if opts.kiosk && opts.style.outside_bg.is_none() {
         opts.style.outside_bg = Some([0, 0, 0]);
-    }
-    // Kiosk default orientation: upside-down mounting. An explicit --rotate
-    // or a nonzero autosaved/preset value wins.
-    if opts.kiosk && !rotate_explicit && opts.style.rotate == 0.0 {
-        opts.style.rotate = 180.0;
     }
     if opts.headless && opts.dump.is_none() {
         return Err("--headless requires --dump PATH".to_string());
