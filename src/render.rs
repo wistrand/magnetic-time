@@ -502,16 +502,32 @@ impl Map {
 
 /// Draw the full clock (face, debug overlays, hands, particles) for a display
 /// time in seconds since midnight. Layout is proportional to the buffer size.
-pub fn draw_clock(
-    fb: &mut Framebuffer,
-    time_secs: f64,
-    face: &Face,
-    sources: &FieldSources,
-    views: DebugViews,
-    style: Style,
-    sim: Option<&Sim>,
-) {
-    let theme = Theme::from_bg(style.bg, style.palette);
+/// Cache for the static face layer (background fill, dial disc, rim,
+/// ticks): those pixels depend only on the key below, not on time or
+/// particles, yet re-rasterizing them is a serial sqrt-per-pixel pass every
+/// frame. Interactive mode keeps one of these across frames and starts the
+/// frame with a memcpy instead; headless passes None and rasterizes
+/// directly. Byte-identical either way: the template is produced by the
+/// same rasterization code it replaces.
+#[derive(Default)]
+pub struct FaceLayer {
+    key: Option<FaceLayerKey>,
+    pixels: Vec<u8>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct FaceLayerKey {
+    w: u32,
+    h: u32,
+    bg: [u8; 3],
+    outside_bg: Option<[u8; 3]>,
+    transparent_bg: bool,
+    /// Ticks are drawn for the hands face only.
+    ticks: bool,
+}
+
+/// The static prefix of a frame: background, dial, rim, ticks.
+fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: bool) {
     if style.transparent_bg {
         fb.clear([0, 0, 0, 0]);
     } else if let Some([r, g, b]) = style.outside_bg {
@@ -527,7 +543,7 @@ pub fn draw_clock(
 
     // Analog ticks only under the hands; a digital face would read oddly with
     // minute ticks behind it.
-    if matches!(face, Face::Hands(_)) {
+    if ticks {
         for i in 0..60 {
             let a = i as f64 / 60.0 * TAU - TAU / 4.0;
             let (major, r0, hw) = if i % 5 == 0 {
@@ -546,6 +562,44 @@ pub fn draw_clock(
             );
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn draw_clock(
+    fb: &mut Framebuffer,
+    time_secs: f64,
+    face: &Face,
+    sources: &FieldSources,
+    views: DebugViews,
+    style: Style,
+    sim: Option<&Sim>,
+    cache: Option<&mut FaceLayer>,
+) {
+    let theme = Theme::from_bg(style.bg, style.palette);
+    let ticks = matches!(face, Face::Hands(_));
+    match cache {
+        Some(layer) => {
+            let key = FaceLayerKey {
+                w: fb.width,
+                h: fb.height,
+                bg: style.bg,
+                outside_bg: style.outside_bg,
+                transparent_bg: style.transparent_bg,
+                ticks,
+            };
+            if layer.key != Some(key) {
+                draw_face_statics(fb, &theme, style, ticks);
+                layer.pixels.clear();
+                layer.pixels.extend_from_slice(&fb.pixels);
+                layer.key = Some(key);
+            } else {
+                fb.pixels.copy_from_slice(&layer.pixels);
+            }
+        }
+        None => draw_face_statics(fb, &theme, style, ticks),
+    }
+    let m = Map::of(fb);
+    let (cx, cy, r) = (m.cx, m.cy, m.r);
 
     if views.field {
         draw_field_heatmap(fb, &m, sources);

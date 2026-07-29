@@ -568,6 +568,7 @@ fn run_headless(opts: &Options) -> Result<(), String> {
         opts.views,
         opts.style,
         Some(&particle_sim),
+        None,
     );
     let path = opts.dump.as_ref().unwrap();
     render::write_png(path, &fb)?;

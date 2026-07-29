@@ -23,3 +23,9 @@ console_error_panic_hook = "0.1"
 # Pixel loops are unusable at opt-level 0.
 [profile.dev]
 opt-level = 2
+
+# No [profile.release] overrides: lto ("thin"/"fat") + codegen-units = 1 were
+# A/B-benched 2026-07-29 (interleaved runs, min-of-N) and LOST on the default
+# sim config (~15% slower with thin, ~3% with fat; render ~3% faster, tide
+# flat). The rayon neighbor pass inlines worse under LTO here. Re-measure
+# before re-adding.

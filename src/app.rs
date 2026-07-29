@@ -5,7 +5,7 @@ use eframe::egui;
 
 use crate::clock::{format_time, ClockSource};
 use crate::field::{Face, FaceConfigs, FaceKind, FieldSources, MagnetKind, SpecShape};
-use crate::render::{draw_clock, DebugViews, Framebuffer, Style};
+use crate::render::{draw_clock, DebugViews, FaceLayer, Framebuffer, Style};
 use crate::sim::{Sim, SimParams};
 use crate::vec2::Vec2;
 
@@ -51,6 +51,8 @@ pub struct ClockApp {
     /// Display time the sim has been stepped to.
     sim_time: f64,
     fb: Framebuffer,
+    /// Cached static face layer (bg, dial, rim, ticks); see render::FaceLayer.
+    face_layer: FaceLayer,
     texture: Option<egui::TextureHandle>,
     dump_status: Option<String>,
     /// JSON preset file path edited in the dev panel, and the last save/load
@@ -96,6 +98,7 @@ impl ClockApp {
             sim: Sim::new(params),
             sim_time,
             fb: Framebuffer::new(8, 8),
+            face_layer: FaceLayer::default(),
             texture: None,
             dump_status: None,
             preset_path: "preset.json".to_string(),
@@ -808,6 +811,7 @@ impl eframe::App for ClockApp {
                     self.views,
                     self.style,
                     Some(&self.sim),
+                    Some(&mut self.face_layer),
                 );
 
                 let image = egui::ColorImage::from_rgba_unmultiplied(
