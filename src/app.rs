@@ -38,9 +38,6 @@ pub struct ClockApp {
     views: DebugViews,
     style: Style,
     show_panel: bool,
-    /// Screen rect of the overlay panel this frame (None when hidden or in
-    /// side-panel mode); the pointer magnet and hotspot ignore clicks here.
-    panel_rect: Option<egui::Rect>,
     /// External config updates, drained each frame.
     pending: Option<PendingConfig>,
     /// Active pointer magnet: position in clock units plus screen position
@@ -92,7 +89,6 @@ impl ClockApp {
             views,
             style,
             show_panel,
-            panel_rect: None,
             pending,
             pointer: None,
             sim: Sim::new(params),
@@ -234,7 +230,7 @@ impl ClockApp {
             let max_h = screen.height() * 0.8;
             // Title-bar close button; same effect as the 12 o'clock tap.
             let mut open = true;
-            let r = egui::Window::new("dev")
+            egui::Window::new("dev")
                 .pivot(egui::Align2::RIGHT_CENTER)
                 .default_pos(egui::pos2(screen.right() - 20.0, screen.center().y))
                 .default_width(180.0)
@@ -245,7 +241,6 @@ impl ClockApp {
                         self.dev_panel_contents(ui);
                     });
                 });
-            self.panel_rect = r.map(|r| r.response.rect);
             if !open {
                 self.show_panel = false;
             }
@@ -722,7 +717,6 @@ impl eframe::App for ClockApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
-        self.panel_rect = None;
         if self.show_panel {
             self.dev_panel(ctx);
         }
@@ -795,32 +789,46 @@ impl eframe::App for ClockApp {
                 // the tap does not stir the particles.
                 let in_hotspot =
                     |w: Vec2| (w - Vec2::new(0.0, -0.9)).len() < 0.15;
-                // In overlay mode the panel floats over the dial; clicks on
-                // it belong to the panel, not the hotspot or the magnet.
-                let panel_rect = self.panel_rect;
-                let over_panel = move |pos: egui::Pos2| {
-                    panel_rect.is_some_and(|r| r.contains(pos))
+                // Pointer events reach the sim only when egui does not own
+                // them: not while a widget interaction is in progress (a
+                // slider or color-picker drag keeps ownership even when the
+                // cursor strays over the dial), and not when the cursor is
+                // over a floating egui layer (the overlay panel, picker
+                // popups). Docked panels live in the background layer and
+                // are already excluded by `avail`.
+                let widget_active = ctx.is_using_pointer();
+                let egui_owns = |pos: egui::Pos2| {
+                    ctx.layer_id_at(pos)
+                        .is_some_and(|l| l.order != egui::Order::Background)
                 };
 
-                if ctx.input(|i| i.pointer.primary_clicked()) {
-                    if let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) {
-                        if avail.contains(pos) && !over_panel(pos) && in_hotspot(to_world(pos)) {
+                let (clicked, primary_down, ipos) = ctx.input(|i| {
+                    (
+                        i.pointer.primary_clicked(),
+                        i.pointer.primary_down(),
+                        i.pointer.interact_pos(),
+                    )
+                });
+
+                if clicked && !widget_active {
+                    if let Some(pos) = ipos {
+                        if avail.contains(pos) && !egui_owns(pos) && in_hotspot(to_world(pos)) {
                             self.show_panel = !self.show_panel;
                         }
                     }
                 }
 
-                self.pointer = ctx.input(|i| {
-                    if !i.pointer.primary_down() {
+                self.pointer = (|| {
+                    if !primary_down || widget_active {
                         return None;
                     }
-                    let pos = i.pointer.interact_pos()?;
-                    if !avail.contains(pos) || over_panel(pos) {
+                    let pos = ipos?;
+                    if !avail.contains(pos) || egui_owns(pos) {
                         return None;
                     }
                     let world = to_world(pos);
                     (world.len() <= 1.05 && !in_hotspot(world)).then_some((world, pos))
-                });
+                })();
 
                 self.fb.resize(px, px);
                 let now = self.clock.now();
