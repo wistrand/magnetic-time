@@ -640,11 +640,12 @@ fn expand(
 pub struct FieldSources {
     elements: Vec<Element>,
     pub markers: Vec<Marker>,
-    /// The interactive pointer magnet (pos, strength, r_min, repel) when down.
-    /// Kept separately so the sim can attenuate the attracting pointer in the
-    /// display field (it must be strong to exert force but would otherwise
-    /// saturate stroke color dish-wide) and add the repelling one's push.
-    pointer: Option<(Vec2, f64, f64, bool)>,
+    /// The interactive pointer magnets (pos, strength, r_min, repel), one per
+    /// active touch/mouse press. Kept separately so the sim can attenuate the
+    /// attracting pointers in the display field (they must be strong to exert
+    /// force but would otherwise saturate stroke color dish-wide) and add the
+    /// repelling ones' push.
+    pointers: Vec<(Vec2, f64, f64, bool)>,
 }
 
 impl FieldSources {
@@ -679,14 +680,14 @@ impl FieldSources {
         Self {
             elements,
             markers,
-            pointer: None,
+            pointers: Vec::new(),
         }
     }
 
-    /// Add the interactive pointer magnet: an axial disc magnet held against
+    /// Add an interactive pointer magnet: an axial disc magnet held against
     /// the dish, whose in-plane field is radial. Modeled as a single soft
     /// charge (pole face), clamped over the disc radius. Appended by the app
-    /// after the hand elements whenever the pointer is down.
+    /// after the hand elements, once per active touch/mouse press.
     pub fn add_pointer(&mut self, pos: Vec2, strength: f64, radius: f64, repel: bool) {
         let r_min = radius.max(MIN_DIST);
         // Attract: a field charge (a |B| maximum the particles climb toward).
@@ -705,36 +706,41 @@ impl FieldSources {
             dir: Vec2::ZERO,
             shape: MagnetShape::Disc { radius },
         });
-        self.pointer = Some((pos, strength, r_min, repel));
+        self.pointers.push((pos, strength, r_min, repel));
     }
 
-    /// The attracting pointer's own field contribution (zero otherwise, incl.
-    /// the repelling pointer, which is a direct force not a field element).
-    /// Must match the Element::Charge branch of `b()`.
+    /// The attracting pointers' own field contribution (repelling pointers
+    /// contribute nothing here; they are a direct force, not a field
+    /// element). Must match the Element::Charge branch of `b()`.
     pub fn pointer_b(&self, p: Vec2) -> Vec2 {
-        match self.pointer {
-            Some((pos, q, r_min, false)) => {
-                let dp = p - pos;
-                let dist = dp.len().max(r_min);
-                dp * (q / (dist * dist * dist))
+        let mut b = Vec2::ZERO;
+        for &(pos, q, r_min, repel) in &self.pointers {
+            if repel {
+                continue;
             }
-            _ => Vec2::ZERO,
+            let dp = p - pos;
+            let dist = dp.len().max(r_min);
+            b += dp * (q / (dist * dist * dist));
         }
+        b
     }
 
-    /// Outward push gradient for a repelling pointer (zero otherwise), scaled
-    /// like grad(|B|^2) so the sim multiplies it by mobility and caps it with
-    /// the same `max_speed`. Magnitude equals the charge's own attraction
-    /// self-gradient (4 q^2 / r^5) but points away, so repel mirrors attract.
+    /// Summed outward push gradient of the repelling pointers (zero
+    /// otherwise), scaled like grad(|B|^2) so the sim multiplies it by
+    /// mobility and caps it with the same `max_speed`. Magnitude equals the
+    /// charge's own attraction self-gradient (4 q^2 / r^5) but points away,
+    /// so repel mirrors attract.
     pub fn pointer_repel_grad(&self, p: Vec2) -> Vec2 {
-        match self.pointer {
-            Some((pos, strength, r_min, true)) => {
-                let dp = p - pos;
-                let dist = dp.len().max(r_min);
-                (dp / dist) * (4.0 * strength * strength / dist.powi(5))
+        let mut g = Vec2::ZERO;
+        for &(pos, strength, r_min, repel) in &self.pointers {
+            if !repel {
+                continue;
             }
-            _ => Vec2::ZERO,
+            let dp = p - pos;
+            let dist = dp.len().max(r_min);
+            g += (dp / dist) * (4.0 * strength * strength / dist.powi(5));
         }
+        g
     }
 
     /// Total field at a point. Dipole: k*(3(m.r_hat)r_hat - m)/|r|^3 with

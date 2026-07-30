@@ -40,10 +40,14 @@ pub struct ClockApp {
     show_panel: bool,
     /// External config updates, drained each frame.
     pending: Option<PendingConfig>,
-    /// Active pointer magnet: position in clock units plus screen position
-    /// for the feedback ring. Set while the primary button/touch is down
-    /// over the dial.
-    pointer: Option<(Vec2, egui::Pos2)>,
+    /// Active pointer magnets: position in clock units plus screen position
+    /// for the feedback ring, one per touch (or one for the mouse while the
+    /// primary button is down over the dial).
+    pointers: Vec<(Vec2, egui::Pos2)>,
+    /// Raw touch points by id, tracked from egui Touch events. While any are
+    /// active they drive `pointers` and the synthesized mouse pointer is
+    /// ignored (egui mirrors the first touch into it).
+    touches: std::collections::BTreeMap<u64, egui::Pos2>,
     sim: Sim,
     /// Display time the sim has been stepped to.
     sim_time: f64,
@@ -90,7 +94,8 @@ impl ClockApp {
             style,
             show_panel,
             pending,
-            pointer: None,
+            pointers: Vec::new(),
+            touches: std::collections::BTreeMap::new(),
             sim: Sim::new(params),
             sim_time,
             fb: Framebuffer::new(8, 8),
@@ -151,14 +156,14 @@ impl ClockApp {
         }
     }
 
-    /// Field sources for a display time, including the pointer magnet while
-    /// it is down.
+    /// Field sources for a display time, including a magnet per active
+    /// pointer (touches, or the mouse while down).
     fn sources_at(&self, t: f64) -> FieldSources {
         let mut sources =
             FieldSources::at_time(&self.face, t, self.sim.params.field_clamp);
-        if let Some((world, _)) = self.pointer {
-            let p = &self.sim.params;
-            if p.pointer_strength > 0.0 {
+        let p = &self.sim.params;
+        if p.pointer_strength > 0.0 {
+            for &(world, _) in &self.pointers {
                 sources.add_pointer(world, p.pointer_strength, p.pointer_radius, p.pointer_repel);
             }
         }
@@ -803,6 +808,21 @@ impl eframe::App for ClockApp {
                 };
 
                 let (clicked, primary_down, ipos) = ctx.input(|i| {
+                    // Track raw touch points; egui also mirrors the first
+                    // touch into the synthesized pointer, so while any touch
+                    // is active the touch map is the sole magnet source.
+                    for e in &i.events {
+                        if let egui::Event::Touch { id, phase, pos, .. } = e {
+                            match phase {
+                                egui::TouchPhase::Start | egui::TouchPhase::Move => {
+                                    self.touches.insert(id.0, *pos);
+                                }
+                                egui::TouchPhase::End | egui::TouchPhase::Cancel => {
+                                    self.touches.remove(&id.0);
+                                }
+                            }
+                        }
+                    }
                     (
                         i.pointer.primary_clicked(),
                         i.pointer.primary_down(),
@@ -818,17 +838,31 @@ impl eframe::App for ClockApp {
                     }
                 }
 
-                self.pointer = (|| {
-                    if !primary_down || widget_active {
-                        return None;
+                // A magnet per pointer: every active touch, or the mouse
+                // while its button is down and no touches are active.
+                self.pointers.clear();
+                if !widget_active {
+                    let mut accept = |pos: egui::Pos2| {
+                        if !avail.contains(pos) || egui_owns(pos) {
+                            return;
+                        }
+                        let world = to_world(pos);
+                        if world.len() <= 1.05 && !in_hotspot(world) {
+                            self.pointers.push((world, pos));
+                        }
+                    };
+                    if self.touches.is_empty() {
+                        if primary_down {
+                            if let Some(pos) = ipos {
+                                accept(pos);
+                            }
+                        }
+                    } else {
+                        for &pos in self.touches.values() {
+                            accept(pos);
+                        }
                     }
-                    let pos = ipos?;
-                    if !avail.contains(pos) || egui_owns(pos) {
-                        return None;
-                    }
-                    let world = to_world(pos);
-                    (world.len() <= 1.05 && !in_hotspot(world)).then_some((world, pos))
-                })();
+                }
 
                 self.fb.resize(px, px);
                 let now = self.clock.now();
@@ -869,9 +903,9 @@ impl eframe::App for ClockApp {
                     egui::Color32::WHITE,
                 );
 
-                // Feedback ring around the pointer magnet.
-                if let Some((_, screen)) = self.pointer {
-                    if self.sim.params.pointer_strength > 0.0 {
+                // Feedback ring around each pointer magnet.
+                if self.sim.params.pointer_strength > 0.0 {
+                    for &(_, screen) in &self.pointers {
                         ui.painter().circle_stroke(
                             screen,
                             (self.sim.params.pointer_radius * dial_r_pts as f64) as f32,
