@@ -570,6 +570,14 @@ impl ClockApp {
             );
             ui.add(egui::Slider::new(&mut p.noise, crate::sim::bounds::NOISE.ui()).text("noise"));
             ui.add(
+                egui::Slider::new(&mut p.disturb_every, crate::sim::bounds::DISTURB_EVERY.ui())
+                    .text("disturb every s (0 = off)"),
+            );
+            ui.add(
+                egui::Slider::new(&mut p.disturb_force, crate::sim::bounds::DISTURB_FORCE.ui())
+                    .text("disturb force"),
+            );
+            ui.add(
                 egui::Slider::new(&mut p.chain_strength, crate::sim::bounds::CHAIN_STRENGTH.ui())
                     .text("chain strength"),
             );

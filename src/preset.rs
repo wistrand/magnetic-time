@@ -65,6 +65,8 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     num_line(&mut e, "mobility", sim.mobility);
     num_line(&mut e, "max_speed", sim.max_speed);
     num_line(&mut e, "noise", sim.noise);
+    num_line(&mut e, "disturb_every", sim.disturb_every);
+    num_line(&mut e, "disturb_force", sim.disturb_force);
     num_line(&mut e, "repulsion_radius", sim.repulsion_radius);
     num_line(&mut e, "repulsion_strength", sim.repulsion_strength);
     num_line(&mut e, "chain_strength", sim.chain_strength);
@@ -287,6 +289,12 @@ pub fn apply_json(
     }
     if let Some(v) = num("noise") {
         sim.noise = bounds::NOISE.clamp(v);
+    }
+    if let Some(v) = num("disturb_every") {
+        sim.disturb_every = bounds::DISTURB_EVERY.clamp(v);
+    }
+    if let Some(v) = num("disturb_force") {
+        sim.disturb_force = bounds::DISTURB_FORCE.clamp(v);
     }
     if let Some(v) = num("repulsion_radius") {
         sim.repulsion_radius = bounds::REPULSION_RADIUS.clamp(v);

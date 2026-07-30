@@ -149,6 +149,10 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--no-autosave]  ignore the autosave file this run
                      [--fps]  show a frame-rate overlay (interactive)
                      [--fps-center]  the overlay at top center (implies --fps)
+                     [--disturb-every SEC]  scramble the particles every SEC
+                     display seconds with a smooth burst (~0.5 s ramp, one
+                     random direction per particle per burst; 0 = off);
+                     [--disturb-force F] sets the peak burst speed, units/s
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
                      [--chain-neighbors N] [--dt F] [--field-clamp F] [--fluid-scale F]
@@ -262,6 +266,16 @@ fn parse_args() -> Result<Options, String> {
                 opts.sim.noise = value("--noise", &mut args)?
                     .parse()
                     .map_err(|e| format!("--noise: {e}"))?
+            }
+            "--disturb-every" => {
+                opts.sim.disturb_every = value("--disturb-every", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--disturb-every: {e}"))?
+            }
+            "--disturb-force" => {
+                opts.sim.disturb_force = value("--disturb-force", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--disturb-force: {e}"))?
             }
             "--repulsion" => {
                 opts.sim.repulsion_strength = value("--repulsion", &mut args)?

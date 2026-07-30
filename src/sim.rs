@@ -85,6 +85,16 @@ pub struct SimParams {
     /// larger). Exposed 2026-07-15 to test whether the band wavelength is
     /// seeded by this scale.
     pub field_clamp: f64,
+    /// Periodic disturbance: every this many display seconds each particle
+    /// gets a smooth velocity burst (sin^2 envelope over DISTURB_SMOOTH
+    /// seconds, fixed random direction per particle per burst). 0 disables.
+    /// Deterministic (direction keyed by particle and burst index);
+    /// structures scramble and then re-form.
+    pub disturb_every: f64,
+    /// Peak burst speed, units/s. Net displacement per burst is roughly
+    /// disturb_force * DISTURB_SMOOTH / 2. Not scaled by fluid_scale (a
+    /// macro-scale intervention, not microphysics).
+    pub disturb_force: f64,
     /// Fluid coarseness: a similarity transform of the particle
     /// microphysics. Scales all micro-lengths (repulsion_radius,
     /// chain_spacing, chain_range) and micro-velocities (chain_strength,
@@ -99,6 +109,10 @@ pub struct SimParams {
 /// Per-step low-pass factor for the display weight `w_disp`; press/release
 /// fades over roughly 5 steps (~1/6 display-second) instead of flashing.
 const W_DISP_SMOOTH: f32 = 0.2;
+
+/// Disturbance burst length, display seconds: the periodic kick ramps in and
+/// out over this window (sin^2 envelope) instead of landing in one step.
+const DISTURB_SMOOTH: f64 = 0.5;
 
 /// Reorder particles into spatial (Z-order) order every this many steps, so
 /// spatially-near particles stay index-near and the neighbor gather reads
@@ -149,6 +163,8 @@ impl Default for SimParams {
             chain_max_neighbors: 48,
             chain_cone: 0.0,
             field_clamp: crate::field::MIN_DIST,
+            disturb_every: 0.0,
+            disturb_force: 0.5,
             fluid_scale: 1.0,
             seed: 1,
         }
@@ -246,6 +262,8 @@ pub mod bounds {
     pub const FIELD_CLAMP: Bound = positive(0.005, 0.08);
     pub const FLUID_SCALE: Bound = positive(0.1, 8.0);
     pub const DRAG_COUPLING: Bound = unit(1.0);
+    pub const DISTURB_EVERY: Bound = non_neg(0.0, 120.0);
+    pub const DISTURB_FORCE: Bound = non_neg(0.0, 3.0);
     pub const POINTER_STRENGTH: Bound = non_neg(0.0, 150.0);
     pub const POINTER_RADIUS: Bound = positive(0.005, 0.5);
     pub const POINTER_VISUAL: Bound = unit(1.0);
@@ -276,6 +294,8 @@ impl SimParams {
         bounds::CHAIN_SPEED_CAP.validate("--chain-speed-cap", self.chain_speed_cap)?;
         bounds::DT.validate("--dt", self.dt)?;
         bounds::FIELD_CLAMP.validate("--field-clamp", self.field_clamp)?;
+        bounds::DISTURB_EVERY.validate("--disturb-every", self.disturb_every)?;
+        bounds::DISTURB_FORCE.validate("--disturb-force", self.disturb_force)?;
         bounds::FLUID_SCALE.validate("--fluid-scale", self.fluid_scale)?;
         bounds::DRAG_COUPLING.validate("--drag", self.drag_coupling)?;
         bounds::POINTER_STRENGTH.validate("--pointer-strength", self.pointer_strength)?;
@@ -419,6 +439,12 @@ pub struct Sim {
     /// Steps taken; also the noise stream selector, so noise is deterministic
     /// and independent of thread scheduling.
     step_index: u64,
+    /// Display seconds since the last periodic disturbance fired.
+    disturb_acc: f64,
+    /// Display seconds into the current burst; >= DISTURB_SMOOTH = inactive.
+    disturb_burst_t: f64,
+    /// Burst counter; keys the per-burst direction streams.
+    disturb_burst_id: u64,
     rng: Rng,
     hash: SpatialHash,
 }
@@ -439,6 +465,9 @@ impl Sim {
             field: vec![FieldSample::default(); params.count],
             field_scratch: vec![FieldSample::default(); params.count],
             step_index: 0,
+            disturb_acc: 0.0,
+            disturb_burst_t: f64::MAX,
+            disturb_burst_id: 0,
             hash: SpatialHash::new(params.repulsion_radius),
             params,
             pos,
@@ -576,6 +605,33 @@ impl Sim {
         let repulsion_strength32 = p.repulsion_strength as f32;
         let chain_speed_cap32 = p.chain_speed_cap as f32;
         let noise32 = p.noise as f32;
+        // Periodic disturbance: a burst starts when the accumulated display
+        // time crosses the interval, then ramps in and out over
+        // DISTURB_SMOOTH seconds (sin^2 envelope). disturb32 is this step's
+        // envelope-scaled speed; each particle keeps one random direction
+        // for the whole burst (keyed by burst id) so the shove is coherent.
+        let mut disturb32 = 0.0f32;
+        if p.disturb_every > 0.0 && p.disturb_force > 0.0 {
+            self.disturb_acc += p.dt;
+            if self.disturb_acc >= p.disturb_every {
+                self.disturb_acc = 0.0;
+                self.disturb_burst_t = 0.0;
+                self.disturb_burst_id += 1;
+            }
+            if self.disturb_burst_t < DISTURB_SMOOTH {
+                let x = self.disturb_burst_t / DISTURB_SMOOTH;
+                let s = (std::f64::consts::PI * x).sin();
+                disturb32 = (p.disturb_force * s * s) as f32;
+                self.disturb_burst_t += p.dt;
+            }
+        } else {
+            self.disturb_acc = 0.0;
+            self.disturb_burst_t = f64::MAX;
+        }
+        let disturb_base = p
+            .seed
+            .wrapping_add(0x5851F42D4C957F2D)
+            ^ self.disturb_burst_id.wrapping_mul(0x9E3779B97F4A7C15);
         let drag_coupling32 = p.drag_coupling as f32;
         let cone_t32 = cone_t as f32;
         let dish_r32 = DISH_R as f32;
@@ -723,6 +779,16 @@ impl Sim {
             let mut rng = Rng::new(noise_base ^ (i as u64).wrapping_mul(0xA24BAED4963EE407));
             let a = rng.f64() as f32 * tau32;
             v += Vec2f::new(a.cos(), a.sin()) * noise32;
+
+            // Periodic disturbance: direction is stable for the whole burst
+            // (per-particle stream keyed by burst id), speed follows the
+            // envelope, so each particle gets one smooth coherent shove.
+            if disturb32 > 0.0 {
+                let mut rng =
+                    Rng::new(disturb_base ^ (i as u64).wrapping_mul(0xA24BAED4963EE407));
+                let a = rng.f64() as f32 * tau32;
+                v += Vec2f::new(a.cos(), a.sin()) * disturb32;
+            }
 
             *vel = v;
         });

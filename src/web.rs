@@ -240,6 +240,18 @@ impl WebHandle {
         self.push();
     }
 
+    pub fn set_disturb_every(&self, v: f64) {
+        self.config.borrow_mut().sim.disturb_every =
+            crate::sim::bounds::DISTURB_EVERY.clamp(v);
+        self.push();
+    }
+
+    pub fn set_disturb_force(&self, v: f64) {
+        self.config.borrow_mut().sim.disturb_force =
+            crate::sim::bounds::DISTURB_FORCE.clamp(v);
+        self.push();
+    }
+
     pub fn set_repulsion(&self, v: f64) {
         self.config.borrow_mut().sim.repulsion_strength = crate::sim::bounds::REPULSION_STRENGTH.clamp(v);
         self.push();
