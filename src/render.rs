@@ -225,6 +225,14 @@ pub struct Style {
     /// View rotation in degrees, clockwise (static; mounting orientation).
     /// Pure presentation: sim, field, and dumped positions stay unrotated.
     pub rotate: f64,
+    /// Mirror the view horizontally (world x flips before rotation; the
+    /// clock reads counterclockwise). Pure presentation, like `rotate`. For
+    /// mirror/projection mounting.
+    pub flip_x: bool,
+    /// Mirror the view vertically (world y flips before rotation; the clock
+    /// reads counterclockwise). Pure presentation, like `rotate`. For
+    /// mirror/projection mounting.
+    pub flip_y: bool,
     /// Particle color scale.
     pub palette: Palette,
     /// Background color; all face colors and the particle blend mode derive
@@ -272,6 +280,8 @@ impl Default for Style {
             show_hands: false,
             show_face: true,
             rotate: 0.0,
+            flip_x: false,
+            flip_y: false,
             palette: Palette::default(),
             bg: DEFAULT_BG,
             outside_bg: None,
@@ -505,10 +515,13 @@ struct Map {
     /// cos/sin of the view rotation.
     c: f64,
     s: f64,
+    /// World-axis signs, applied before rotation: -1.0 mirrors.
+    fx: f64,
+    fy: f64,
 }
 
 impl Map {
-    fn of(fb: &Framebuffer, rotate_deg: f64) -> Self {
+    fn of(fb: &Framebuffer, rotate_deg: f64, flip_x: bool, flip_y: bool) -> Self {
         let c = fb.width.min(fb.height) as f64 / 2.0;
         let a = rotate_deg.to_radians();
         Self {
@@ -517,25 +530,35 @@ impl Map {
             r: c * 0.94,
             c: a.cos(),
             s: a.sin(),
+            fx: if flip_x { -1.0 } else { 1.0 },
+            fy: if flip_y { -1.0 } else { 1.0 },
         }
     }
 
-    /// Rotate a world direction into view space.
+    /// Flip+rotate a world direction into view space.
     fn rot_vec(&self, v: Vec2) -> Vec2 {
-        Vec2::new(v.x * self.c - v.y * self.s, v.x * self.s + v.y * self.c)
+        let vx = v.x * self.fx;
+        let vy = v.y * self.fy;
+        Vec2::new(vx * self.c - vy * self.s, vx * self.s + vy * self.c)
     }
 
     fn px(&self, p: Vec2) -> (f64, f64) {
-        let rx = p.x * self.c - p.y * self.s;
-        let ry = p.x * self.s + p.y * self.c;
+        let px = p.x * self.fx;
+        let py = p.y * self.fy;
+        let rx = px * self.c - py * self.s;
+        let ry = px * self.s + py * self.c;
         (self.cx + rx * self.r, self.cy + ry * self.r)
     }
 
-    /// Pixel center back to clock-face units (inverse rotation applied).
+    /// Pixel center back to clock-face units (inverse rotation, then the
+    /// flips undone).
     fn world(&self, x: usize, y: usize) -> Vec2 {
         let dx = (x as f64 + 0.5 - self.cx) / self.r;
         let dy = (y as f64 + 0.5 - self.cy) / self.r;
-        Vec2::new(dx * self.c + dy * self.s, -dx * self.s + dy * self.c)
+        Vec2::new(
+            (dx * self.c + dy * self.s) * self.fx,
+            (-dx * self.s + dy * self.c) * self.fy,
+        )
     }
 }
 
@@ -565,6 +588,8 @@ struct FaceLayerKey {
     show_face: bool,
     /// View rotation (moves the ticks).
     rotate: f64,
+    flip_x: bool,
+    flip_y: bool,
     /// Ticks are drawn for the hands face only.
     ticks: bool,
 }
@@ -581,7 +606,7 @@ fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: b
     if !style.show_face {
         return;
     }
-    let m = Map::of(fb, style.rotate);
+    let m = Map::of(fb, style.rotate, style.flip_x, style.flip_y);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
 
     fb.disc(cx, cy, r, theme.dial);
@@ -635,6 +660,8 @@ pub fn draw_clock(
                 transparent_bg: style.transparent_bg,
                 show_face: style.show_face,
                 rotate: style.rotate,
+                flip_x: style.flip_x,
+                flip_y: style.flip_y,
                 ticks,
             };
             if layer.key != Some(key) {
@@ -648,7 +675,7 @@ pub fn draw_clock(
         }
         None => draw_face_statics(fb, &theme, style, ticks),
     }
-    let m = Map::of(fb, style.rotate);
+    let m = Map::of(fb, style.rotate, style.flip_x, style.flip_y);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
 
     if views.field {
@@ -665,17 +692,13 @@ pub fn draw_clock(
                 let widths = [r * 0.030, r * 0.020, r * 0.007];
                 let tails = [0.06, 0.06, 0.14];
                 let colors = [theme.hand, theme.hand, theme.second];
-                let rot = style.rotate.to_radians();
+                // World-space endpoints through the Map so rotation and the
+                // flips apply uniformly.
                 for i in 0..3 {
-                    let a = angles[i] + rot;
-                    fb.capsule(
-                        cx - a.cos() * r * tails[i],
-                        cy - a.sin() * r * tails[i],
-                        cx + a.cos() * r * hands::LEN[i],
-                        cy + a.sin() * r * hands::LEN[i],
-                        widths[i],
-                        colors[i],
-                    );
+                    let d = Vec2::new(angles[i].cos(), angles[i].sin());
+                    let (ax, ay) = m.px(d * -tails[i]);
+                    let (bx, by) = m.px(d * hands::LEN[i]);
+                    fb.capsule(ax, ay, bx, by, widths[i], colors[i]);
                 }
                 fb.disc(cx, cy, r * 0.028, theme.hand);
                 fb.disc(cx, cy, r * 0.014, theme.second);

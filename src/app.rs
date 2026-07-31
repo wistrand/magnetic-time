@@ -679,6 +679,10 @@ impl ClockApp {
             );
             ui.add(egui::Slider::new(&mut self.style.pad, 0.0..=0.45).text("dial padding"));
             ui.add(egui::Slider::new(&mut self.style.rotate, 0.0..=360.0).text("rotate deg"));
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.style.flip_x, "flip x");
+                ui.checkbox(&mut self.style.flip_y, "flip y");
+            });
         });
 
         ui.separator();
@@ -783,10 +787,12 @@ impl eframe::App for ClockApp {
                 // follows the rotated 12 o'clock tick for free).
                 let rot = self.style.rotate.to_radians();
                 let (rc, rs) = (rot.cos(), rot.sin());
+                let fx = if self.style.flip_x { -1.0 } else { 1.0 };
+                let fy = if self.style.flip_y { -1.0 } else { 1.0 };
                 let to_world = move |pos: egui::Pos2| {
                     let dx = ((pos.x - center.x) / dial_r_pts) as f64;
                     let dy = ((pos.y - center.y) / dial_r_pts) as f64;
-                    Vec2::new(dx * rc + dy * rs, -dx * rs + dy * rc)
+                    Vec2::new((dx * rc + dy * rs) * fx, (-dx * rs + dy * rc) * fy)
                 };
                 // Hotspot around the 12 o'clock tick: tapping it toggles the
                 // dev panel (the only way in for the panel-less web

@@ -124,6 +124,9 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      ticks); only the background fill under the particles
                      [--rotate DEG]  rotate the whole view clockwise (static
                      mounting orientation; sim and dumps stay unrotated)
+                     [--flip-x | --flip-y]  mirror the view horizontally /
+                     vertically (the clock reads counterclockwise; for
+                     mirror/projection mounting; both = 180 rotation)
                      [--no-dev-panel]  start with the dev panel hidden
                      (interactive; tap the 12 o'clock tick to toggle)
                      [--dev-overlay]  dev panel floats over the dial instead
@@ -444,6 +447,8 @@ fn parse_args() -> Result<Options, String> {
                     .parse()
                     .map_err(|e| format!("--rotate: {e}"))?
             }
+            "--flip-x" => opts.style.flip_x = true,
+            "--flip-y" => opts.style.flip_y = true,
             "--no-dev-panel" => opts.show_panel = false,
             "--dev-overlay" => opts.style.panel_overlay = true,
             "--pad" => {
