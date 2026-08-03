@@ -3,4 +3,4 @@
 # are passed through, e.g. bin/magnetic-time-kiosk.sh --pad 0.1 --face tide
 set -euo pipefail
 cd "$(dirname "$0")/.."
-exec target/release/magnetic-time --kiosk --autosave --rotate 180 --disturb-every 3500 "$@"
+exec target/release/magnetic-time --kiosk --autosave --disturb-every 3500 "$@"
