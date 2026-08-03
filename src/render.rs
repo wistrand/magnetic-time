@@ -9,6 +9,7 @@ use std::path::Path;
 
 use rayon::prelude::*;
 
+use crate::dish::Dish;
 use crate::field::{Face, FieldSources, MagnetShape};
 use crate::hands;
 use crate::sim::Sim;
@@ -553,8 +554,13 @@ impl Map {
     /// Pixel center back to clock-face units (inverse rotation, then the
     /// flips undone).
     fn world(&self, x: usize, y: usize) -> Vec2 {
-        let dx = (x as f64 + 0.5 - self.cx) / self.r;
-        let dy = (y as f64 + 0.5 - self.cy) / self.r;
+        self.world_px(x as f64 + 0.5, y as f64 + 0.5)
+    }
+
+    /// Same for already-centered pixel coordinates (fill_sdf callbacks).
+    fn world_px(&self, px: f64, py: f64) -> Vec2 {
+        let dx = (px - self.cx) / self.r;
+        let dy = (py - self.cy) / self.r;
         Vec2::new(
             (dx * self.c + dy * self.s) * self.fx,
             (-dx * self.s + dy * self.c) * self.fy,
@@ -590,12 +596,13 @@ struct FaceLayerKey {
     rotate: f64,
     flip_x: bool,
     flip_y: bool,
+    dish: Dish,
     /// Ticks are drawn for the hands face only.
     ticks: bool,
 }
 
 /// The static prefix of a frame: background, dial, rim, ticks.
-fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: bool) {
+fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: bool, dish: &Dish) {
     if style.transparent_bg {
         fb.clear([0, 0, 0, 0]);
     } else if let Some([r, g, b]) = style.outside_bg {
@@ -609,8 +616,22 @@ fn draw_face_statics(fb: &mut Framebuffer, theme: &Theme, style: Style, ticks: b
     let m = Map::of(fb, style.rotate, style.flip_x, style.flip_y);
     let (cx, cy, r) = (m.cx, m.cy, m.r);
 
-    fb.disc(cx, cy, r, theme.dial);
-    fb.ring(cx, cy, r, r * 0.02, theme.rim);
+    if dish.is_plain_circle() {
+        fb.disc(cx, cy, r, theme.dial);
+        fb.ring(cx, cy, r, r * 0.02, theme.rim);
+    } else {
+        // Dial fill and rim from the shape SDF (world units scale to pixels
+        // by m.r; rotation/flips are isometries so distances survive). Full-
+        // frame bounds; the face-layer cache makes this a one-off cost.
+        let (w, h) = (fb.width as f64, fb.height as f64);
+        fb.fill_sdf(0.0, 0.0, w - 1.0, h - 1.0, theme.dial, |x, y| {
+            dish.sdf(m.world_px(x, y)) * m.r
+        });
+        let half_t = r * 0.02 / 2.0;
+        fb.fill_sdf(0.0, 0.0, w - 1.0, h - 1.0, theme.rim, |x, y| {
+            (dish.sdf(m.world_px(x, y)) * m.r).abs() - half_t
+        });
+    }
 
     // Analog ticks only under the hands; a digital face would read oddly with
     // minute ticks behind it.
@@ -649,6 +670,7 @@ pub fn draw_clock(
 ) {
     let theme = Theme::from_bg(style.bg, style.palette, style.face_color);
     let ticks = matches!(face, Face::Hands(_));
+    let dish = sim.map(|s| s.params.dish).unwrap_or_default();
     match cache {
         Some(layer) => {
             let key = FaceLayerKey {
@@ -662,10 +684,11 @@ pub fn draw_clock(
                 rotate: style.rotate,
                 flip_x: style.flip_x,
                 flip_y: style.flip_y,
+                dish,
                 ticks,
             };
             if layer.key != Some(key) {
-                draw_face_statics(fb, &theme, style, ticks);
+                draw_face_statics(fb, &theme, style, ticks, &dish);
                 layer.pixels.clear();
                 layer.pixels.extend_from_slice(&fb.pixels);
                 layer.key = Some(key);
@@ -673,7 +696,7 @@ pub fn draw_clock(
                 fb.pixels.copy_from_slice(&layer.pixels);
             }
         }
-        None => draw_face_statics(fb, &theme, style, ticks),
+        None => draw_face_statics(fb, &theme, style, ticks, &dish),
     }
     let m = Map::of(fb, style.rotate, style.flip_x, style.flip_y);
     let (cx, cy, r) = (m.cx, m.cy, m.r);

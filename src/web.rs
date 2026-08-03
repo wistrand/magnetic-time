@@ -240,6 +240,13 @@ impl WebHandle {
         self.push();
     }
 
+    /// Dish shape, CLI grammar (e.g. "square:0.15+hole:0,0,0.3").
+    pub fn set_dish(&self, v: &str) -> Result<(), JsValue> {
+        self.config.borrow_mut().sim.dish = crate::dish::Dish::parse(v).map_err(js_err)?;
+        self.push();
+        Ok(())
+    }
+
     pub fn set_disturb_every(&self, v: f64) {
         self.config.borrow_mut().sim.disturb_every =
             crate::sim::bounds::DISTURB_EVERY.clamp(v);

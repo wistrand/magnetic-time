@@ -84,6 +84,7 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     e.push(format!("{}: {}", q("pointer_repel"), sim.pointer_repel));
     num_line(&mut e, "field_clamp", sim.field_clamp);
     num_line(&mut e, "fluid_scale", sim.fluid_scale);
+    e.push(format!("{}: {}", q("dish"), q(&sim.dish.label())));
 
     // Face.
     e.push(format!("{}: {}", q("face"), q(face_str(face.kind))));
@@ -345,6 +346,11 @@ pub fn apply_json(
     }
     if let Some(v) = num("fluid_scale") {
         sim.fluid_scale = bounds::FLUID_SCALE.clamp(v);
+    }
+    if let Some(v) = text("dish") {
+        if let Ok(d) = crate::dish::Dish::parse(v) {
+            sim.dish = d;
+        }
     }
 
     // Face.

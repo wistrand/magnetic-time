@@ -4,6 +4,7 @@
 
 mod app;
 mod clock;
+mod dish;
 mod field;
 mod hands;
 mod preset;
@@ -152,6 +153,14 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--no-autosave]  ignore the autosave file this run
                      [--fps]  show a frame-rate overlay (interactive)
                      [--fps-center]  the overlay at top center (implies --fps)
+                     [--dish SHAPE]  dish shape: circle (default),
+                     square[:CORNER], super[:N] (superellipse),
+                     star[:N[:INNER]] (N-spiked star, notch radius INNER),
+                     poly[:N] (regular N-gon), ring:INNER;
+                     append up to 4 +hole:X,Y,R cutouts, e.g.
+                     square:0.15+hole:0.4,0,0.2. Walls, seeding, and the dial
+                     outline follow the shape; ticks and hand length keep the
+                     inscribed circle
                      [--disturb-every SEC]  scramble the particles every SEC
                      display seconds with a smooth burst (~0.5 s ramp, one
                      random direction per particle per burst; 0 = off);
@@ -250,6 +259,9 @@ fn parse_args() -> Result<Options, String> {
                 opts.sim.count = value("--particles", &mut args)?
                     .parse()
                     .map_err(|e| format!("--particles: {e}"))?
+            }
+            "--dish" => {
+                opts.sim.dish = dish::Dish::parse(&value("--dish", &mut args)?)?
             }
             "--seed" => {
                 opts.sim.seed = value("--seed", &mut args)?

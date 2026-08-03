@@ -60,6 +60,9 @@ pub struct ClockApp {
     /// result message.
     preset_path: String,
     preset_status: Option<String>,
+    /// Dish shape editor text (CLI grammar) and its last parse error.
+    dish_text: String,
+    dish_status: Option<String>,
     /// Persist config changes to preset::autosave_path() (throttled, on
     /// change) so the next start restores them. Native only.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -104,6 +107,8 @@ impl ClockApp {
             dump_status: None,
             preset_path: "preset.json".to_string(),
             preset_status: None,
+            dish_text: params.dish.label(),
+            dish_status: None,
             autosave,
             autosave_frames: 0,
             autosave_last: String::new(),
@@ -126,6 +131,7 @@ impl ClockApp {
         if self.sim.params.count != old_count {
             self.sim.set_count(self.sim.params.count);
         }
+        self.dish_text = self.sim.params.dish.label();
         Ok(())
     }
 
@@ -154,6 +160,7 @@ impl ClockApp {
         if cfg.sim.count != cur_count {
             self.sim.set_count(cfg.sim.count);
         }
+        self.dish_text = self.sim.params.dish.label();
     }
 
     /// Field sources for a display time, including a magnet per active
@@ -466,6 +473,22 @@ impl ClockApp {
         }
         if ui.button("reset particles").clicked() {
             self.sim = Sim::new(self.sim.params);
+        }
+        ui.horizontal(|ui| {
+            ui.label("dish");
+            ui.add(egui::TextEdit::singleline(&mut self.dish_text).desired_width(140.0));
+            if ui.button("apply").clicked() {
+                match crate::dish::Dish::parse(self.dish_text.trim()) {
+                    Ok(d) => {
+                        self.sim.params.dish = d;
+                        self.dish_status = None;
+                    }
+                    Err(e) => self.dish_status = Some(e),
+                }
+            }
+        });
+        if let Some(status) = &self.dish_status {
+            ui.label(status.clone());
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -851,7 +874,7 @@ impl eframe::App for ClockApp {
                     if let Some(pos) = ipos {
                         if avail.contains(pos) && !egui_owns(pos) {
                             let world = to_world(pos);
-                            if world.len() <= 1.05 && !in_hotspot(world) {
+                            if self.sim.params.dish.sdf(world) <= 0.05 && !in_hotspot(world) {
                                 self.sim.disturb();
                             }
                         }
@@ -862,12 +885,14 @@ impl eframe::App for ClockApp {
                 // while its button is down and no touches are active.
                 self.pointers.clear();
                 if !widget_active {
+                    // Same 0.05 margin the circle always had (sdf = len - 1).
+                    let pdish = self.sim.params.dish;
                     let mut accept = |pos: egui::Pos2| {
                         if !avail.contains(pos) || egui_owns(pos) {
                             return;
                         }
                         let world = to_world(pos);
-                        if world.len() <= 1.05 && !in_hotspot(world) {
+                        if pdish.sdf(world) <= 0.05 && !in_hotspot(world) {
                             self.pointers.push((world, pos));
                         }
                     };

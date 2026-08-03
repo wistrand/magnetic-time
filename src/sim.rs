@@ -4,6 +4,7 @@
 
 use rayon::prelude::*;
 
+use crate::dish::Dish;
 use crate::field::FieldSources;
 use crate::vec2::{Vec2, Vec2f};
 
@@ -95,6 +96,10 @@ pub struct SimParams {
     /// disturb_force * DISTURB_SMOOTH / 2. Not scaled by fluid_scale (a
     /// macro-scale intervention, not microphysics).
     pub disturb_force: f64,
+    /// Container shape (wall + seeding + dial outline). The plain circle
+    /// keeps the exact original f32 fast paths, so default output is
+    /// unchanged; see dish.rs.
+    pub dish: Dish,
     /// Fluid coarseness: a similarity transform of the particle
     /// microphysics. Scales all micro-lengths (repulsion_radius,
     /// chain_spacing, chain_range) and micro-velocities (chain_strength,
@@ -165,6 +170,7 @@ impl Default for SimParams {
             field_clamp: crate::field::MIN_DIST,
             disturb_every: 0.0,
             disturb_force: 0.5,
+            dish: Dish::default(),
             fluid_scale: 1.0,
             seed: 1,
         }
@@ -449,15 +455,30 @@ pub struct Sim {
     hash: SpatialHash,
 }
 
+/// One uniform sample inside the dish wall. The plain circle keeps the
+/// original polar sampling (same RNG draws, so existing seeds reproduce);
+/// shaped dishes rejection-sample the bounding square against the wall SDF.
+fn spawn_particle(rng: &mut Rng, dish: &Dish) -> Vec2f {
+    if dish.is_plain_circle() {
+        let a = rng.f64() * TAU;
+        let r = rng.f64().sqrt() * DISH_R;
+        return Vec2::new(a.cos() * r, a.sin() * r).to_f32();
+    }
+    loop {
+        let p = Vec2::new(rng.f64() * 2.0 - 1.0, rng.f64() * 2.0 - 1.0);
+        if dish.sdf(p) < -crate::dish::WALL_INSET {
+            return p.to_f32();
+        }
+    }
+}
+
 impl Sim {
     /// Particles start uniformly distributed over the dish.
     pub fn new(params: SimParams) -> Self {
         let mut rng = Rng::new(params.seed);
         let mut pos = Vec::with_capacity(params.count);
         for _ in 0..params.count {
-            let a = rng.f64() * TAU;
-            let r = rng.f64().sqrt() * DISH_R;
-            pos.push(Vec2::new(a.cos() * r, a.sin() * r).to_f32());
+            pos.push(spawn_particle(&mut rng, &params.dish));
         }
         Self {
             vel: vec![Vec2f::ZERO; params.count],
@@ -496,9 +517,8 @@ impl Sim {
             self.hash.build(&self.pos);
         } else if n > old {
             while self.pos.len() < n {
-                let a = self.rng.f64() * TAU;
-                let r = self.rng.f64().sqrt() * DISH_R;
-                self.pos.push(Vec2::new(a.cos() * r, a.sin() * r).to_f32());
+                let p = spawn_particle(&mut self.rng, &self.params.dish);
+                self.pos.push(p);
                 self.vel.push(Vec2f::ZERO);
                 self.vel_smooth.push(Vec2f::ZERO);
                 self.field.push(FieldSample::default());
@@ -651,6 +671,10 @@ impl Sim {
         let cone_t32 = cone_t as f32;
         let dish_r32 = DISH_R as f32;
         let wall_k32 = WALL_K as f32;
+        let dish = p.dish;
+        // Plain circle keeps the original f32 radial fast paths (byte-exact
+        // defaults); shaped dishes go through the SDF wall.
+        let plain_circle = dish.is_plain_circle();
         let tau32 = TAU as f32;
         let dt32 = p.dt as f32;
 
@@ -785,9 +809,16 @@ impl Sim {
             v += chain_v;
 
             // Dish wall.
-            let rad = pos.len();
-            if rad > dish_r32 {
-                v += pos.normalized() * (-(rad - dish_r32) * wall_k32);
+            if plain_circle {
+                let rad = pos.len();
+                if rad > dish_r32 {
+                    v += pos.normalized() * (-(rad - dish_r32) * wall_k32);
+                }
+            } else {
+                let (wd, n) = dish.wall(pos.to_f64());
+                if wd > 0.0 {
+                    v += n.to_f32() * (-(wd as f32) * wall_k32);
+                }
             }
 
             // Brownian jitter from a stateless per-particle stream.
@@ -806,13 +837,20 @@ impl Sim {
                     Rng::new(disturb_base ^ (i as u64).wrapping_mul(0xA24BAED4963EE407));
                 let a = rng.f64() as f32 * tau32;
                 let mut d = Vec2f::new(a.cos(), a.sin());
-                let rad = pos.len();
-                if rad > disturb_band {
-                    let rhat = pos / rad.max(1e-6);
+                // (distance into the wall band, outward normal); band =
+                // within disturb_reach of the wall.
+                let band = if plain_circle {
+                    let rad = pos.len();
+                    (rad > disturb_band).then(|| (rad - disturb_band, pos / rad.max(1e-6)))
+                } else {
+                    let (wd, n) = dish.wall(pos.to_f64());
+                    let into = disturb_reach + wd as f32;
+                    (into > 0.0).then(|| (into, n.to_f32()))
+                };
+                if let Some((into, rhat)) = band {
                     let out = d.dot(rhat);
                     if out > 0.0 {
-                        let w = ((rad - disturb_band) / (dish_r32 - disturb_band))
-                            .clamp(0.0, 1.0);
+                        let w = (into / disturb_reach).clamp(0.0, 1.0);
                         d = d - rhat * (out * w);
                     }
                 }
@@ -859,10 +897,17 @@ impl Sim {
         self.pos.par_iter_mut().zip(&self.vel).for_each(|(pos, &v)| {
             let mut np = *pos + v * dt32;
             // Backstop clamp; the wall force handles the normal case.
-            let rad = np.len();
-            let limit = dish_r32 + 0.02;
-            if rad > limit {
-                np = np * (limit / rad);
+            if plain_circle {
+                let rad = np.len();
+                let limit = dish_r32 + 0.02;
+                if rad > limit {
+                    np = np * (limit / rad);
+                }
+            } else {
+                let (wd, n) = dish.wall(np.to_f64());
+                if wd > 0.02 {
+                    np = np - n.to_f32() * (wd as f32 - 0.02);
+                }
             }
             *pos = np;
         });
