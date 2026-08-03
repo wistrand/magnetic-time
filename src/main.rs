@@ -52,6 +52,14 @@ struct Options {
     /// Start with the dev panel shown (interactive). Toggle at runtime with
     /// the 12 o'clock tick either way.
     show_panel: bool,
+    /// Camera obstacle field: V4L2 device path, threshold, polarity
+    /// (interactive native only; needs ffmpeg on PATH).
+    camera: Option<String>,
+    camera_mode: app::CameraMode,
+    camera_threshold: f64,
+    camera_invert: bool,
+    camera_dir: f64,
+    camera_force: f64,
     /// Autosave config changes to preset::autosave_path() and reload them on
     /// the next interactive start. Enabled by --autosave, the dev panel
     /// checkbox, or an existing autosave file; --no-autosave skips both the
@@ -91,6 +99,12 @@ impl Default for Options {
             face: field::FaceConfigs::default(),
             save_preset: None,
             show_panel: true,
+            camera: None,
+            camera_mode: app::CameraMode::Wall,
+            camera_threshold: 0.5,
+            camera_invert: false,
+            camera_dir: 90.0,
+            camera_force: 0.05,
             autosave: false,
             fullscreen: false,
             kiosk: false,
@@ -107,7 +121,7 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--sim-seconds N] [--size PX] [--speed N]
                      [--dump-positions PATH]  headless: also write particle
                      positions + local field as CSV (x,y,dir_x,dir_y,w)
-                     [--view field,quiver,dipoles,velocity,hash]
+                     [--view field,quiver,dipoles,velocity,hash,chains,camera]
                      [--particles N] [--seed N] [--stroke-len F]
                      [--palette NAME|startHex-endHex] [--bg RRGGBB]  particle
                      color ramp (start -> end, OKLab); NAME = ice|ember|emerald|
@@ -143,6 +157,18 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      compositor only the circular dial is visible (clicks in
                      the corners still hit the window). Headless PNGs get
                      transparent corners.
+                     [--camera PATH]  webcam luma as an obstacle field on top
+                     of --dish (interactive; needs ffmpeg): frames are
+                     center-cropped, mirrored, thresholded, and distance-
+                     transformed into an extra wall layer. Dark areas block
+                     particles; [--camera-threshold F] 0..=1 (default 0.5),
+                     [--camera-invert] makes bright areas the walls
+                     [--camera-mode wall|flow]  flow pushes particles along a
+                     fixed direction instead: v = dir * (luma - threshold) *
+                     force, [--camera-dir DEG] clockwise from 3 o'clock
+                     (default 90), [--camera-force F] speed at full
+                     intensity, units/s (default 0.05); --camera-invert
+                     flips the sign
                      [--kiosk]  shorthand for --fullscreen --no-dev-panel
                      --dev-overlay; defaults --outside-bg to 000000 when not
                      set otherwise, and centers the fps overlay when shown
@@ -481,6 +507,32 @@ fn parse_args() -> Result<Options, String> {
                 );
             }
             "--transparent-bg" => opts.style.transparent_bg = true,
+            "--camera" => opts.camera = Some(value("--camera", &mut args)?),
+            "--camera-threshold" => {
+                opts.camera_threshold = value("--camera-threshold", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--camera-threshold: {e}"))?
+            }
+            "--camera-invert" => opts.camera_invert = true,
+            "--camera-mode" => {
+                opts.camera_mode = match value("--camera-mode", &mut args)?.as_str() {
+                    "wall" => app::CameraMode::Wall,
+                    "flow" => app::CameraMode::Flow,
+                    other => {
+                        return Err(format!("--camera-mode: unknown '{other}' (wall, flow)"))
+                    }
+                }
+            }
+            "--camera-dir" => {
+                opts.camera_dir = value("--camera-dir", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--camera-dir: {e}"))?
+            }
+            "--camera-force" => {
+                opts.camera_force = value("--camera-force", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--camera-force: {e}"))?
+            }
             "--autosave" => opts.autosave = true,
             "--no-autosave" => opts.autosave = false,
             "--kiosk" => {
@@ -542,6 +594,21 @@ fn parse_args() -> Result<Options, String> {
     }
     if !opts.style.rotate.is_finite() {
         return Err(format!("--rotate must be finite, got {}", opts.style.rotate));
+    }
+    if !opts.camera_threshold.is_finite() || !(0.0..=1.0).contains(&opts.camera_threshold) {
+        return Err(format!(
+            "--camera-threshold must be in 0..=1, got {}",
+            opts.camera_threshold
+        ));
+    }
+    if !opts.camera_dir.is_finite() {
+        return Err(format!("--camera-dir must be finite, got {}", opts.camera_dir));
+    }
+    if !opts.camera_force.is_finite() || !(0.0..=1.0).contains(&opts.camera_force) {
+        return Err(format!(
+            "--camera-force must be in 0..=1, got {}",
+            opts.camera_force
+        ));
     }
     let (w, h) = opts.window_size;
     if !(w.is_finite() && h.is_finite()) || w < 64.0 || h < 64.0 {
@@ -708,6 +775,14 @@ fn main() -> ExitCode {
                 opts.face,
                 opts.show_panel,
                 opts.autosave,
+                opts.camera.clone().map(|path| app::CameraConfig {
+                    path,
+                    mode: opts.camera_mode,
+                    threshold: opts.camera_threshold,
+                    invert: opts.camera_invert,
+                    dir_deg: opts.camera_dir,
+                    force: opts.camera_force,
+                }),
                 None,
             )))
         }),

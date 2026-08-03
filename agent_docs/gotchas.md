@@ -387,6 +387,112 @@ what implementation teaches; correct entries that turn out wrong.
   (`Theme::dark`), correctly: those are not palette-colored, they just need to
   contrast with their own background.
 
+## Findings from the face-layer cache
+
+- The static prefix (bg clear, dial disc, rim, ticks) was re-rasterized
+  every interactive frame through the serial sqrt-per-pixel `fill_sdf`, and
+  it was the DOMINANT render cost: 10.4 -> 3.0 ms/frame at 700 px, 49 -> 23
+  ms at 1600 px once cached (`FaceLayer` in `src/render.rs`). If frame cost
+  regresses, check the cache is hitting before profiling anything else.
+- Byte-exactness holds because the template is produced by the exact
+  rasterization code it replaces and then memcpy'd; headless passes no
+  cache and rasterizes directly (verified identical, incl. transparent-bg).
+- Any new Style/config input that changes the statics MUST be added to
+  `FaceLayerKey`, or the cache serves stale pixels. The key currently
+  covers size, bg, outside_bg, face_color, transparent_bg, show_face,
+  rotate, flip_x, flip_y, dish, and ticks (face kind).
+
+## Findings from the release-profile A/B (LTO lost)
+
+- `lto = "thin"` + `codegen-units = 1` measured ~15% SLOWER on the default
+  sim config (thin alone similar; fat ~3% slower; render ~3% faster; tide
+  flat). The rayon neighbor pass inlines worse under LTO here. Reverted;
+  the negative result is recorded in Cargo.toml. Re-measure before
+  re-adding.
+- Naive before/after benchmarking was thermally confounded (first cold run
+  ~35% fast, consecutive suite runs varied 25%). Valid method: build each
+  variant once, keep the binaries, warm both, then interleave runs
+  (A/B/A/B) and compare min-of-N. This generalizes the earlier turbo
+  finding; never trust sequential whole-suite comparisons on this machine.
+
+## Findings from input ownership (egui vs the pointer magnet)
+
+- The pointer magnet reads raw `ctx.input` pointer state, which does NOT
+  know egui owns an in-progress widget interaction. Owner-reported: dragging
+  a panel slider or the color picker and straying over the dial stirred the
+  particles. Guards in `ClockApp::update`: skip the magnet while
+  `ctx.is_using_pointer()` (a widget drag keeps ownership until release),
+  and when `ctx.layer_id_at(pos)` is a non-background layer (the overlay
+  panel window, picker popups; docked panels are background-layer and
+  already excluded by the panel-free rect). Never gate on a hand-tracked
+  panel rect; popups extend outside it (a rect-based guard was replaced by
+  the layer check).
+- Multitouch: egui mirrors the FIRST touch into the synthesized mouse
+  pointer. The touch map (from raw `Event::Touch`) and the mouse path must
+  never both feed magnets or finger one doubles; while any touch is active
+  the touch map is the sole source.
+- egui `Window::anchor` re-pins every frame, so anchored windows cannot be
+  dragged; a movable window needs `default_pos` (+ pivot) instead.
+
+## Findings from the disturbance bursts
+
+- A one-step impulse kick reads as teleport speckle; the burst is smoothed
+  (sin^2 envelope over DISTURB_SMOOTH) with ONE direction per particle per
+  burst (keyed by burst index) so it reads as a coherent shove. Re-drawing
+  the direction each step degrades it to boiling noise.
+- Uniform random directions pile the outward half of rim-adjacent particles
+  against the dish wall for the burst duration (measured: 19% of particles
+  past the wall mid-burst vs 1% at rest). Fixed by fading the kick's
+  outward component to zero across the wall band sized to the burst's
+  expected travel; edge particles get tangential scramble instead. Any
+  future impulse-like effect needs the same treatment.
+- The burst runner is gated on `disturb_force` alone, not `disturb_every`,
+  so the manual trigger (`Sim::disturb`, double-click) works with the
+  periodic schedule off. Keep it that way.
+
+## Findings from the dish shapes
+
+- The plain circle keeps the ORIGINAL f32 radial fast paths in the wall
+  force, backstop, seeding, and the disc/ring rasterization. This is what
+  keeps default output byte-identical; routing the circle through the
+  generic SDF path changes ulp-level arithmetic and breaks baselines. Keep
+  the `is_plain_circle` splits when touching dish code.
+- Shaped-dish seeding rejection-samples, consuming different RNG draws than
+  the circle's polar sampling; dumps are deterministic per config but not
+  comparable across shapes.
+- Walls thinner than max speed x dt (~0.02 units during strong disturbance
+  bursts) can be tunneled between steps; hole radius is validated to
+  0.02..=0.9 but geometry (e.g. a hole grazing the outer wall) can still
+  create thin septa. Known limit, accepted.
+- The star SDF is exact (angular fold to one spike-edge segment), not a
+  pseudo-distance; notch corners and tips stay crisp under the numeric
+  gradient. The superellipse IS a pseudo-distance (exact on axes only);
+  fine for wall force and rasterized edge, do not use it where true
+  distance matters.
+- Dish lives in `SimParams` (Copy), so holes are a fixed-size array
+  (`MAX_HOLES`), not a Vec. It is physics config that the renderer reads
+  through `sim.params`; do not duplicate it into Style.
+
+## Findings from the camera obstacle field
+
+- Camera capture is an ffmpeg SUBPROCESS piping raw gray frames, not a
+  V4L/camera crate: keeps the dependency list untouched, and ffmpeg is the
+  tool already used to probe the device. The reader thread dies silently if
+  ffmpeg is missing or the device unplugs; the panel's "waiting for frames"
+  label is the only signal. The ffmpeg -vf commas must be escaped
+  (`min(iw\,ih)`) because there is no shell.
+- Raw thresholded intensity is NOT usable as an SDF: it is flat inside
+  regions, so the wall force has no gradient exactly where particles need
+  pushing out. The mask goes through a euclidean distance transform
+  (Felzenszwalb 1D passes in `dish.rs`) first; verified against an analytic
+  disc to sub-cell error.
+- The camera grid is force-only (no backstop projection) and its
+  penetration is capped: a wall dropped onto a dense clump evacuates it
+  over a few frames instead of teleporting or exploding it.
+- `Sim::wall_grid` is app-fed live state, deliberately outside `SimParams`
+  and presets; `Sim::new` (reset particles) drops it and the next camera
+  frame restores it within ~33 ms.
+
 ## Decision history
 
 - JSON presets (`src/preset.rs`) are hand-rolled flat JSON, not serde. The
@@ -397,6 +503,12 @@ what implementation teaches; correct entries that turn out wrong.
   Do not "upgrade" to serde or nested JSON without owner sign-off; the flat
   schema is also what makes hand-editing a preset safe. Round-trip
   (save -> load -> save) is byte-identical; keep it that way.
+- Autosave state protocol: the file's presence at `preset::autosave_path()`
+  IS the enabled flag (no separate setting to keep in sync); enabling
+  writes it, disabling deletes it, an existing file turns autosave on at
+  startup and loads as the base config BEFORE flag parsing so explicit
+  flags win. Headless, `--grad-check`, and `--save-preset` runs never load
+  it, or experiments would silently pick up mutable state.
 - Motion trails / phosphor decay: rejected by the owner. The buffer clears
   fully every frame. Do not reintroduce trails as a "cheap improvement".
 - Chain textures: explicitly requested by the owner; simulated with real pair

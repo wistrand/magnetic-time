@@ -10,12 +10,16 @@ switched by the time (`--face seg`), or the tide arcs: three concentric arcs
 of bar magnets that fill with the seconds, minutes, and hours (`--face tide`). Above them sits a simulated
 liquid layer of magnetic particles in the overdamped regime: each fixed-dt
 step, particle velocity comes from the analytic field gradient of the face
-magnets (plus an interactive pointer magnet), short-range dipole-dipole
-chaining, soft-core repulsion, optional drag coupling, noise, and the dish
-wall.
+magnets (plus interactive pointer magnets, one per touch), short-range
+dipole-dipole chaining, soft-core repulsion, optional drag coupling, noise,
+an optional periodic disturbance burst, and the dish wall. The dish is a
+parametric SDF shape (circle default; squares, superellipses, stars,
+polygons, rings, holes via `--dish`).
 Everything is rasterized into one CPU pixel buffer shown as an egui texture.
-Ships as a native app (with headless PNG mode for verification) and as a
-wasm `<magnetic-clock>` web component whose attributes reuse the CLI grammar.
+Ships as a native app (with headless PNG mode for verification, plus kiosk
+options for wall displays: fullscreen, view rotation/mirroring, autosave)
+and as a wasm `<magnetic-clock>` web component whose attributes reuse the
+CLI grammar.
 
 All plan phases are built and owner-tuned; the plan was promoted to
 [agent_docs/architecture.md](agent_docs/architecture.md).
@@ -25,6 +29,7 @@ All plan phases are built and owner-tuned; the plan was promoted to
 | Path          | Role                                                |
 |---------------|-----------------------------------------------------|
 | `src/`        | application code                                    |
+| `bin/`        | launch scripts (kiosk start, autosave clean)        |
 | `agent_docs/` | architecture, design decisions, gotchas (below)     |
 | `docs/`       | GitHub Pages site (index.html, img/), committed     |
 | `scripts/`    | web build, perf benchmark (bench.sh), experiment analysis (numpy+PIL) |
@@ -63,9 +68,9 @@ scripts.
 ## Docs
 
 - [agent_docs/architecture.md](agent_docs/architecture.md): module map, data flow, verification methodology, deferred work. Start here.
-- [agent_docs/design-simulation.md](agent_docs/design-simulation.md): physics model: field elements, overdamped particles, chains, drag coupling, pointer magnet. Read before touching sim code.
-- [agent_docs/design-rendering.md](agent_docs/design-rendering.md): pixel-buffer rendering, themes/palettes, debug views, headless PNG dump.
-- [agent_docs/gotchas.md](agent_docs/gotchas.md): traps and decision history (numerics, egui, wasm, presets).
+- [agent_docs/design-simulation.md](agent_docs/design-simulation.md): physics model: field elements, overdamped particles, chains, drag coupling, pointer magnets, disturbance bursts, dish boundary. Read before touching sim code.
+- [agent_docs/design-rendering.md](agent_docs/design-rendering.md): pixel-buffer rendering, statics cache, view transforms, themes/palettes, dev panel, debug views, headless PNG dump.
+- [agent_docs/gotchas.md](agent_docs/gotchas.md): traps and decision history (numerics, egui input ownership, wasm, presets, caches, benchmarking).
 - [agent_docs/research-chain-banding.md](agent_docs/research-chain-banding.md): band physics, resolved: zippering builds the walls, tidal fragmentation spaces them; experiments, retractions, instruments.
 
 ## Invariants

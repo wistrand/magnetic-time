@@ -160,15 +160,19 @@ and ~7.5 mm bands.
 
 ## Secondary effects
 
-- Pointer magnet (touch/mouse): a soft charge appended to the field while
-  the pointer is down. Its force uses the full field, but its contribution
-  to the display/magnetization field (stroke color, orientation, chain
-  weight rendering) is attenuated by `pointer_visual`. This split is
-  deliberate: F ~ grad(|B|^2) forces the pointer's |B| to exceed b_sat
-  dish-wide at useful strengths, which would flash every stroke white and
-  point it at the finger. The rendered weight `w_disp` is also low-passed
-  (W_DISP_SMOOTH in `src/sim.rs`) so press/release fades instead of
-  flashing. Do not "simplify" these back to the raw field.
+- Pointer magnets (touch/mouse): a soft charge appended to the field per
+  active pointer. Multitouch: every finger is an independent magnet
+  (`FieldSources::pointers` is a Vec; `pointer_b` / `pointer_repel_grad`
+  sum over it); the mouse is one pointer while its button is down. All
+  pointers share the strength/radius/repel params. Force uses the full
+  field, but each pointer's contribution to the display/magnetization field
+  (stroke color, orientation, chain weight rendering) is attenuated by
+  `pointer_visual`. This split is deliberate: F ~ grad(|B|^2) forces the
+  pointer's |B| to exceed b_sat dish-wide at useful strengths, which would
+  flash every stroke white and point it at the finger. The rendered weight
+  `w_disp` is also low-passed (W_DISP_SMOOTH in `src/sim.rs`) so
+  press/release fades instead of flashing. Do not "simplify" these back to
+  the raw field.
 - Pointer repel (`pointer_repel`, `--pointer-repel`): a charge always makes a
   |B| MAXIMUM, and F ~ grad(|B|^2) climbs to maxima, so a charge can only
   attract; flipping its sign does nothing. Repel is therefore a separate
@@ -185,12 +189,49 @@ and ~7.5 mm bands.
   approximation of inter-particle hydrodynamics; there is still no bulk flow.
 - Brownian noise: small random velocity per step, for texture and to break
   symmetry. Deterministic RNG seeded from a config value.
+- Periodic disturbance (`disturb_every` / `disturb_force`, 0 = off): every N
+  display seconds, each particle gets a smooth velocity burst (sin^2
+  envelope over DISTURB_SMOOTH seconds, peak speed `disturb_force`) in one
+  random direction held for the whole burst, so the shove is coherent, not
+  boiling noise. Deterministic: direction keyed by (particle, burst index).
+  Near the wall the kick's outward component fades to zero over the burst's
+  expected travel; without the fade every burst piled the outward half of
+  rim particles against the wall as a bright ring (measured; see
+  [gotchas.md](gotchas.md)). Double-click/tap on the dial fires the same
+  burst via `Sim::disturb` (interactive only, so headless determinism is
+  unaffected). Not scaled by fluid_scale: it is a macro intervention, not
+  microphysics.
 - Stirring advection (hands dragging bulk liquid): planned, never built;
   drag coupling turned out to cover the wanted look. Revisit only if
   fluid-memory wakes are wanted (also listed under deferred work in
   [architecture.md](architecture.md)).
-- Boundary: circular dish; particles are pushed back inside with a soft normal
-  force (no hard reflection, it looks wrong under drag).
+- Camera obstacle field (`--camera PATH`, native interactive): webcam luma
+  becomes an extra wall layer on top of the dish. An ffmpeg subprocess
+  (thread + latest-frame mailbox in `src/app.rs`) delivers center-cropped,
+  mirrored CAM_RES gray frames; the app thresholds them into an open mask
+  and builds a `WallGrid` (`src/dish.rs`): a TRUE signed distance grid via
+  euclidean distance transform, because raw thresholded intensity is flat
+  inside regions and gives the wall force no direction. The grid
+  participates in the wall force only (penetration capped), never the
+  backstop, so a wall appearing over particles evacuates them smoothly.
+  A second variant (`--camera-mode flow`) skips the threshold/EDT and uses
+  the signed intensity directly: v += dir * (luma - threshold) * force,
+  with a fixed world direction (`--camera-dir`, degrees clockwise from 3
+  o'clock) and gain (`--camera-force`); threshold is the neutral level,
+  invert flips the sign. The two variants are mutually exclusive
+  (`Sim::wall_grid` vs `Sim::flow`). Not part of SimParams or presets;
+  headless never has either, so reproducibility is untouched.
+- Boundary: the dish (`SimParams::dish`, `src/dish.rs`) is a parametric
+  shape evaluated as a signed distance function; particles are pushed back
+  inside with a soft normal force along the SDF gradient (no hard
+  reflection, it looks wrong under drag). The visual boundary sits at the
+  dial edge; the particle wall is inset by WALL_INSET (0.08), matching the
+  classic circle's DISH_R = 0.92. Holes are SDF differences and their walls
+  behave exactly like the outer one. Seeding rejection-samples the SDF for
+  shaped dishes; the plain circle keeps the original polar sampling and f32
+  radial wall math, so default output is byte-identical. Constraint: walls
+  thinner than max speed x dt (~0.02 units during strong disturbance
+  bursts) can be tunneled between steps.
 
 ## Time
 

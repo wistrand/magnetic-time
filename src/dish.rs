@@ -230,3 +230,150 @@ impl Dish {
         s
     }
 }
+
+/// A signed-distance grid over the dial square [-1,1]^2, negative = open,
+/// sampled bilinearly. An extra wall layer composed on top of the [`Dish`]
+/// (union of walls); built per frame from camera luma in `src/app.rs`, but
+/// source-agnostic. A true distance field (exact euclidean distance
+/// transform), so the wall force has a usable gradient everywhere, unlike
+/// raw thresholded intensity, which is flat inside regions.
+pub struct WallGrid {
+    res: usize,
+    /// Signed distance in world units (cell = 2/res), row-major, y down.
+    d: Vec<f32>,
+}
+
+/// 1D squared euclidean distance transform (Felzenszwalb & Huttenlocher),
+/// lower envelope of parabolas. `f` is the source row, `d` the output.
+fn dt1d(f: &[f64], d: &mut [f64], v: &mut [usize], z: &mut [f64]) {
+    let n = f.len();
+    let mut k = 0usize;
+    v[0] = 0;
+    z[0] = f64::NEG_INFINITY;
+    z[1] = f64::INFINITY;
+    for q in 1..n {
+        let sect = |k: usize| {
+            ((f[q] + (q * q) as f64) - (f[v[k]] + (v[k] * v[k]) as f64))
+                / (2.0 * (q as f64 - v[k] as f64))
+        };
+        let mut s = sect(k);
+        while k > 0 && s <= z[k] {
+            k -= 1;
+            s = sect(k);
+        }
+        k += 1;
+        v[k] = q;
+        z[k] = s;
+        z[k + 1] = f64::INFINITY;
+    }
+    k = 0;
+    for q in 0..n {
+        while z[k + 1] < q as f64 {
+            k += 1;
+        }
+        let dq = q as f64 - v[k] as f64;
+        d[q] = dq * dq + f[v[k]];
+    }
+}
+
+/// Squared distance (in cells) from every cell to the nearest cell where
+/// `seed` is true. INF-filled where no seed exists.
+fn edt_sq(seed: &[bool], res: usize) -> Vec<f64> {
+    const INF: f64 = 1e12;
+    let mut g: Vec<f64> = seed.iter().map(|&s| if s { 0.0 } else { INF }).collect();
+    let mut f = vec![0.0f64; res];
+    let mut d = vec![0.0f64; res];
+    let mut v = vec![0usize; res];
+    let mut z = vec![0.0f64; res + 1];
+    // Columns, then rows.
+    for x in 0..res {
+        for y in 0..res {
+            f[y] = g[y * res + x];
+        }
+        dt1d(&f, &mut d, &mut v, &mut z);
+        for y in 0..res {
+            g[y * res + x] = d[y];
+        }
+    }
+    for y in 0..res {
+        f.copy_from_slice(&g[y * res..(y + 1) * res]);
+        dt1d(&f, &mut d, &mut v, &mut z);
+        g[y * res..(y + 1) * res].copy_from_slice(&d);
+    }
+    g
+}
+
+/// Bilinear sample of a row-major res x res grid at world (x, y) over the
+/// dial square [-1,1]^2, clamped to the grid.
+fn bilinear(data: &[f32], res: usize, x: f32, y: f32) -> f32 {
+    let r = res;
+    let gx = ((x + 1.0) * 0.5 * (r - 1) as f32).clamp(0.0, (r - 1) as f32);
+    let gy = ((y + 1.0) * 0.5 * (r - 1) as f32).clamp(0.0, (r - 1) as f32);
+    let (x0, y0) = (gx as usize, gy as usize);
+    let (x1, y1) = ((x0 + 1).min(r - 1), (y0 + 1).min(r - 1));
+    let (fx, fy) = (gx - x0 as f32, gy - y0 as f32);
+    let at = |xx: usize, yy: usize| data[yy * r + xx];
+    let top = at(x0, y0) * (1.0 - fx) + at(x1, y0) * fx;
+    let bot = at(x0, y1) * (1.0 - fx) + at(x1, y1) * fx;
+    top * (1.0 - fy) + bot * fy
+}
+
+/// A raw scalar grid over the dial square, bilinear-sampled. Camera "flow"
+/// variant: signed intensity in [-1, 1] driving a fixed-direction push.
+pub struct ScalarGrid {
+    res: usize,
+    v: Vec<f32>,
+}
+
+impl ScalarGrid {
+    pub fn from_values(v: Vec<f32>, res: usize) -> Self {
+        Self { res, v }
+    }
+
+    pub fn sample(&self, x: f32, y: f32) -> f32 {
+        bilinear(&self.v, self.res, x, y)
+    }
+}
+
+impl WallGrid {
+    /// Build from an open/blocked mask (`open[i]` true = particles allowed),
+    /// row-major res x res over the dial square.
+    pub fn from_open_mask(open: &[bool], res: usize) -> Self {
+        let blocked: Vec<bool> = open.iter().map(|&o| !o).collect();
+        let d_to_blocked = edt_sq(&blocked, res);
+        let d_to_open = edt_sq(open, res);
+        let cell = 2.0 / res as f64;
+        let d = (0..res * res)
+            .map(|i| {
+                let sd = if open[i] {
+                    -d_to_blocked[i].sqrt()
+                } else {
+                    d_to_open[i].sqrt()
+                };
+                (sd * cell).clamp(-4.0, 4.0) as f32
+            })
+            .collect();
+        Self { res, d }
+    }
+
+    /// Bilinear sample at world (x, y), clamped to the grid.
+    pub fn sample(&self, x: f32, y: f32) -> f32 {
+        bilinear(&self.d, self.res, x, y)
+    }
+
+    /// Signed distance plus outward unit normal via central differences
+    /// (one cell step). The normal is zero where the gradient degenerates
+    /// (e.g. a fully blocked frame), which callers treat as no force.
+    pub fn sample_grad(&self, x: f32, y: f32) -> (f32, f32, f32) {
+        let d = self.sample(x, y);
+        let e = 2.0 / self.res as f32;
+        let gx = self.sample(x + e, y) - self.sample(x - e, y);
+        let gy = self.sample(x, y + e) - self.sample(x, y - e);
+        let len = (gx * gx + gy * gy).sqrt();
+        if len > 1e-6 {
+            (d, gx / len, gy / len)
+        } else {
+            (d, 0.0, 0.0)
+        }
+    }
+}

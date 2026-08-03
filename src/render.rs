@@ -104,6 +104,9 @@ const QUIVER: Color = [80, 200, 255, 255];
 const POLE_N: Color = [235, 70, 70, 255];
 const POLE_S: Color = [70, 110, 245, 255];
 const HASH_CELL: [u8; 3] = [120, 255, 150];
+const CAM_WALL: [u8; 3] = [255, 90, 60];
+const CAM_EDGE: [u8; 3] = [255, 210, 90];
+const CAM_FLOW_POS: [u8; 3] = [90, 230, 130];
 
 fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 {
@@ -313,6 +316,8 @@ pub struct DebugViews {
     pub hash: bool,
     /// Lines between chain-interacting pairs.
     pub chains: bool,
+    /// Camera obstacle field: shade blocked regions, outline the boundary.
+    pub camera: bool,
 }
 
 impl DebugViews {
@@ -327,9 +332,10 @@ impl DebugViews {
                 "velocity" => v.velocity = true,
                 "hash" => v.hash = true,
                 "chains" => v.chains = true,
+                "camera" => v.camera = true,
                 other => {
                     return Err(format!(
-                        "unknown view '{other}' (field, quiver, dipoles, velocity, hash, chains)"
+                        "unknown view '{other}' (field, quiver, dipoles, velocity, hash, chains, camera)"
                     ))
                 }
             }
@@ -764,6 +770,13 @@ pub fn draw_clock(
         if views.hash {
             draw_hash_cells(fb, &m, sim);
         }
+        if views.camera {
+            if let Some(g) = sim.wall_grid.as_ref() {
+                draw_camera_wall(fb, &m, g);
+            } else if let Some(fl) = sim.flow.as_ref() {
+                draw_camera_flow(fb, &m, fl);
+            }
+        }
     }
 
     if views.quiver {
@@ -1100,6 +1113,99 @@ fn draw_particles(fb: &mut Framebuffer, m: &Map, sim: &Sim, views: DebugViews, s
         .par_chunks_mut(chunk)
         .enumerate()
         .for_each(|(bi, band)| render_band(bi, band));
+}
+
+/// Camera obstacle-field overlay: blocked regions (grid sdf > 0) shaded
+/// red, ramping with depth, plus a bright line on the boundary. Debug view;
+/// per-pixel bilinear sample over parallel bands.
+fn draw_camera_wall(fb: &mut Framebuffer, m: &Map, grid: &crate::dish::WallGrid) {
+    let (w, h) = (fb.width as usize, fb.height as usize);
+    if w == 0 || h == 0 {
+        return;
+    }
+    let bands = (rayon::current_num_threads() * 3).clamp(1, h);
+    let band_rows = h.div_ceil(bands);
+    fb.pixels
+        .par_chunks_mut(band_rows * w * 4)
+        .enumerate()
+        .for_each(|(bi, band)| {
+            let y0 = bi * band_rows;
+            let y1 = (y0 + band_rows).min(h);
+            for y in y0..y1 {
+                for x in 0..w {
+                    let p = m.world(x, y);
+                    let d = grid.sample(p.x as f32, p.y as f32);
+                    let i = ((y - y0) * w + x) * 4;
+                    if d > 0.0 {
+                        blend_px(band, i, CAM_WALL, (d / 0.15).min(1.0) * 0.35, true);
+                    }
+                    if d.abs() < 0.008 {
+                        blend_px(band, i, CAM_EDGE, 0.8, true);
+                    }
+                }
+            }
+        });
+}
+
+/// Camera flow overlay: signed intensity tinted green (push along the flow
+/// direction) or red (against it), alpha by magnitude, plus a quiver of
+/// arrows on a grid showing the local push direction and strength
+/// everywhere (arrow length is linear in |intensity|; direction flips with
+/// the sign). Debug view.
+fn draw_camera_flow(fb: &mut Framebuffer, m: &Map, fl: &crate::sim::FlowField) {
+    let (w, h) = (fb.width as usize, fb.height as usize);
+    if w == 0 || h == 0 {
+        return;
+    }
+    let bands = (rayon::current_num_threads() * 3).clamp(1, h);
+    let band_rows = h.div_ceil(bands);
+    fb.pixels
+        .par_chunks_mut(band_rows * w * 4)
+        .enumerate()
+        .for_each(|(bi, band)| {
+            let y0 = bi * band_rows;
+            let y1 = (y0 + band_rows).min(h);
+            for y in y0..y1 {
+                for x in 0..w {
+                    let p = m.world(x, y);
+                    let s = fl.grid.sample(p.x as f32, p.y as f32);
+                    if s.abs() < 0.02 {
+                        continue;
+                    }
+                    let color = if s > 0.0 { CAM_FLOW_POS } else { CAM_WALL };
+                    blend_px(band, ((y - y0) * w + x) * 4, color, s.abs() * 0.35, true);
+                }
+            }
+        });
+    // Arrow grid: world dir through the Map so rotation and flips show the
+    // direction particles actually move on screen; sampled at the arrow
+    // base, colored by sign like the tint.
+    const N: i32 = 18;
+    let step = 2.0 / N as f64;
+    let d = fl.dir.to_f64();
+    for gy in 0..N {
+        for gx in 0..N {
+            let p = Vec2::new(-1.0 + (gx as f64 + 0.5) * step, -1.0 + (gy as f64 + 0.5) * step);
+            if p.len_sq() > 0.92 * 0.92 {
+                continue;
+            }
+            let s = fl.grid.sample(p.x as f32, p.y as f32) as f64;
+            if s.abs() < 0.05 {
+                continue;
+            }
+            let v = d * s.signum();
+            let len = step * 0.8 * s.abs();
+            let color = if s > 0.0 {
+                [CAM_FLOW_POS[0], CAM_FLOW_POS[1], CAM_FLOW_POS[2], 255]
+            } else {
+                [CAM_WALL[0], CAM_WALL[1], CAM_WALL[2], 255]
+            };
+            let (ax, ay) = m.px(p - v * (len / 2.0));
+            let (bx, by) = m.px(p + v * (len / 2.0));
+            fb.capsule(ax, ay, bx, by, m.r * 0.002, color);
+            fb.disc(bx, by, m.r * 0.005, color);
+        }
+    }
 }
 
 /// Spatial-hash occupancy: brighter cell = more particles.

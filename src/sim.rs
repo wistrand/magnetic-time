@@ -4,7 +4,7 @@
 
 use rayon::prelude::*;
 
-use crate::dish::Dish;
+use crate::dish::{Dish, ScalarGrid, WallGrid};
 use crate::field::FieldSources;
 use crate::vec2::{Vec2, Vec2f};
 
@@ -430,6 +430,17 @@ pub struct FieldSample {
     fv: Vec2f,
 }
 
+/// Camera flow field: signed intensity pushing particles along one fixed
+/// world direction, v += dir * intensity * gain. Fed by the app like
+/// `wall_grid`; the two camera variants are mutually exclusive.
+pub struct FlowField {
+    pub grid: ScalarGrid,
+    /// Unit push direction, world space.
+    pub dir: Vec2f,
+    /// Speed at |intensity| = 1, units/s.
+    pub gain: f32,
+}
+
 pub struct Sim {
     pub params: SimParams,
     pub pos: Vec<Vec2f>,
@@ -444,6 +455,13 @@ pub struct Sim {
     field_scratch: Vec<FieldSample>,
     /// Steps taken; also the noise stream selector, so noise is deterministic
     /// and independent of thread scheduling.
+    /// Extra wall layer composed on top of the dish (union of walls); fed by
+    /// the camera obstacle field (src/app.rs), None otherwise. Participates
+    /// in the wall FORCE only, not the backstop: a wall appearing on top of
+    /// particles evacuates them smoothly instead of teleporting them.
+    pub wall_grid: Option<WallGrid>,
+    /// Camera flow variant (see FlowField); None unless --camera-mode flow.
+    pub flow: Option<FlowField>,
     step_index: u64,
     /// Display seconds since the last periodic disturbance fired.
     disturb_acc: f64,
@@ -485,6 +503,8 @@ impl Sim {
             vel_smooth: vec![Vec2f::ZERO; params.count],
             field: vec![FieldSample::default(); params.count],
             field_scratch: vec![FieldSample::default(); params.count],
+            wall_grid: None,
+            flow: None,
             step_index: 0,
             disturb_acc: 0.0,
             disturb_burst_t: f64::MAX,
@@ -723,6 +743,8 @@ impl Sim {
 
         // Pass 2: velocities.
         let (positions, field, hash) = (&self.pos, &self.field, &self.hash);
+        let wall_grid = self.wall_grid.as_ref();
+        let flow = self.flow.as_ref();
         let noise_base = p.seed ^ self.step_index.wrapping_mul(0xD1B54A32D192ED03);
         // Chain-candidate scratch is per rayon task (for_each_init), not per
         // particle: a fresh Vec here is ~0.8M allocations/s at the default
@@ -819,6 +841,20 @@ impl Sim {
                 if wd > 0.0 {
                     v += n.to_f32() * (-(wd as f32) * wall_k32);
                 }
+            }
+            // Extra wall layer (camera obstacle field). Penetration is
+            // capped so a wall dropped onto a dense region evacuates it
+            // briskly but not explosively; the normal is zero where the
+            // grid gradient degenerates (fully blocked frame), no force.
+            if let Some(g) = wall_grid {
+                let (d, nx, ny) = g.sample_grad(pos.x, pos.y);
+                if d > 0.0 {
+                    v += Vec2f::new(nx, ny) * (-d.min(0.2) * wall_k32);
+                }
+            }
+            // Camera flow field: signed intensity, fixed direction.
+            if let Some(fl) = flow {
+                v += fl.dir * (fl.grid.sample(pos.x, pos.y) * fl.gain);
             }
 
             // Brownian jitter from a stateless per-particle stream.

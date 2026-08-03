@@ -14,31 +14,39 @@ file after all phases landed; design rationale lives in
 | `src/clock.rs` | The single time source: display seconds since midnight, speed multiplier, HH:MM:SS I/O |
 | `src/hands.rs` | Hand lengths and angles; defines clock-face units (center origin, dial radius 1, y down) |
 | `src/field.rs` | Faces: `FaceConfigs` (the Copy config every carrier holds) builds a `Face` (rotating `HandMagnets`, the `SegClock` seven-segment readout, or the `TideClock` arcs); magnet layouts (`LayoutSpec`), field elements, analytic B and grad(|B|^2), string parsers shared by CLI and web attributes |
-| `src/sim.rs`   | `SimParams` tunables, overdamped particle stepper, spatial hash, chains, drag coupling  |
-| `src/preset.rs`| JSON presets: `to_json` / `apply_json` over `(FaceConfigs, SimParams, Style, speed)`, hand-rolled flat-JSON reader/writer (no serde), lenient apply |
-| `src/render.rs`| Software rasterizer, `Style`/`Palette`/`Theme`, debug overlays, PNG output              |
-| `src/app.rs`   | eframe app: pending-config channel, pointer magnet, dev panel, fixed-dt catch-up loop   |
+| `src/sim.rs`   | `SimParams` tunables, overdamped particle stepper, spatial hash, chains, drag coupling, disturbance bursts |
+| `src/dish.rs`  | Parametric dish shapes as SDFs (circle, square, superellipse, star, poly, ring, holes): wall force, seeding, dial outline, CLI grammar |
+| `src/preset.rs`| JSON presets: `to_json` / `apply_json` over `(FaceConfigs, SimParams, Style, speed)`, hand-rolled flat-JSON reader/writer (no serde), lenient apply; `autosave_path` |
+| `src/render.rs`| Software rasterizer, `Style`/`Palette`/`Theme`, `Map` view transform (rotate/flips), `FaceLayer` statics cache, debug overlays, PNG output |
+| `src/app.rs`   | eframe app: pending-config channel, multitouch pointer magnets, dev panel (docked or floating overlay), autosave, fixed-dt catch-up loop |
 | `src/web.rs`   | wasm-only `WebHandle` (start/destroy + attribute setters) behind the web component      |
 | `docs/app/magnetic-clock.js` | The `<magnetic-clock>` custom element wrapping `WebHandle`               |
 
 ## Data flow per frame (interactive)
 
 1. `ClockApp::update` drains the pending config (web component pushes), reads
-   the pointer, and steps the sim in fixed dt (`SimParams::dt`, default 1/30
-   display-second; quantitative pattern work needs 1/120, see
-   [gotchas.md](gotchas.md)) toward the current display time under a 12 ms
-   wall budget; excess display time is dropped (hands stay truthful,
-   particles skip).
+   the pointers (every active touch, or the mouse; guarded so egui-owned
+   input never reaches the sim, see [gotchas.md](gotchas.md)), and steps the
+   sim in fixed dt (`SimParams::dt`, default 1/30 display-second;
+   quantitative pattern work needs 1/120, see [gotchas.md](gotchas.md))
+   toward the current display time under a 12 ms wall budget; excess display
+   time is dropped (hands stay truthful, particles skip).
 2. Each sim step: `FieldSources::at_time` expands the current `Face` into
    world elements (hands rotated by time, or the seg readout's switched bars),
-   plus the pointer magnet; pass 1 samples B and grad(|B|^2) analytically per
-   particle, pass 2 sums neighbor forces on the spatial hash, optional pass
-   2.5 smooths velocities (drag coupling), pass 3 integrates.
+   plus one pointer magnet per active pointer; pass 1 samples B and
+   grad(|B|^2) analytically per particle, pass 2 sums neighbor forces on the
+   spatial hash (plus wall force from the dish SDF and any active disturbance
+   burst), optional pass 2.5 smooths velocities (drag coupling), pass 3
+   integrates.
 3. `draw_clock` rasterizes face, magnets, particles, and overlays into one
    RGBA buffer (capped by `Style::max_px`), uploaded as an egui texture. The
-   particle pass is rayon-parallel over horizontal bands (byte-exact vs a
-   serial pass). Headless mode runs the same loop without a window and writes
-   the buffer to PNG.
+   static face layer (bg, dial, rim, ticks) comes from the `FaceLayer` cache
+   (a memcpy per frame; re-rendered only when its key changes). The world to
+   pixel mapping (`Map`) applies the view rotation and flips. The particle
+   pass is rayon-parallel over horizontal bands (byte-exact vs a serial
+   pass). Headless mode runs the same loop without a window and writes the
+   buffer to PNG (headless skips the cache and rasterizes directly,
+   byte-identical by construction).
 
 ## Verification methodology
 
@@ -111,8 +119,41 @@ luminance alone onto a palette-vs-bg comparison (`Theme::ink_add`), so a free
 palette on any background no longer blends into invisibility (see
 [gotchas.md](gotchas.md)).
 
+Latest work (2026-07-28 .. 2026-08-03), the display/kiosk round: window and
+mounting options (`--fullscreen`, `--window-size`, `--pad`, `--kiosk`
+shorthand, Esc quits, `bin/magnetic-time-kiosk.sh`); background separation
+(`--outside-bg` fill outside the dial, `--transparent-bg` alpha-0 corners for
+a circular-window look, `--face-color` rim/tick accent, `--no-face` to hide
+the statics); view transforms as pure presentation in `Map` (`--rotate DEG`,
+`--flip-x`, `--flip-y`; sim, field, and dumped positions stay in world
+space); the `FaceLayer` statics cache (dial/rim/ticks re-rendered only on
+config change, measured 10.4 -> 3.0 ms/frame at 700 px, byte-identical);
+the dev panel's floating overlay mode (`--dev-overlay`, a draggable egui
+window that does not resize the clock) plus input-ownership guards so widget
+drags and popups never reach the pointer magnet; autosave
+(`~/.config/magnetic-time/autosave.json`, file presence = enabled, loads as
+base config under explicit flags, never in headless runs); the periodic
+disturbance (`--disturb-every` / `--disturb-force`, a smooth sin^2 burst
+with per-burst particle directions and a rim fade, also fired by
+double-click); multitouch pointer magnets (one field charge per active
+touch); parametric dish shapes (`src/dish.rs`, `--dish`: SDF-driven wall,
+seeding, and dial outline, with holes; the plain circle keeps byte-exact
+fast paths); a release-profile A/B that measured LTO as a net loss here
+(see Cargo.toml and [gotchas.md](gotchas.md)); and the camera obstacle
+field (`--camera`: webcam luma thresholded and distance-transformed into a
+`WallGrid`, an extra wall layer on top of the dish; ffmpeg subprocess, force
+only, native interactive only).
+
 ## Deferred / gated work
 
+- Render/field optimization candidates from the 2026-07-30 perf analysis,
+  unbuilt: SoA element storage plus an f32 path for `b_and_grad_b2` (the
+  tide/seg faces are field-bound, ~15 ms/step at default count); a CSR
+  (counting-sort) spatial hash replacing the linked-list buckets; per-band
+  particle bucketing in `draw_particles` (each band currently culls all
+  particles); far-field LOD evaluating distant bars as single dipoles.
+  Measure before building; the face-layer cache already removed the largest
+  render cost.
 - GPU path (old phase 6): only if CPU limits particle count. First move is
   rasterization via eframe's wgpu `PaintCallback`, not a compute-shader sim;
   the sim is neighbor-bound at current presets (profiling finding in

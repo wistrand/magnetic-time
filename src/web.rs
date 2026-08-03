@@ -74,6 +74,7 @@ impl WebHandle {
                         cfg.face,
                         cfg.show_panel,
                         false,
+                        None,
                         Some(pending),
                     )))
                 }),

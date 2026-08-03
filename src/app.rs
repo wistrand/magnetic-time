@@ -14,6 +14,85 @@ use crate::vec2::Vec2;
 /// the excess display time; the hands stay truthful to the clock.
 const STEP_BUDGET: web_time::Duration = web_time::Duration::from_millis(12);
 
+/// Camera obstacle-field resolution (grid cells per side).
+const CAM_RES: usize = 128;
+
+/// How camera luma feeds the sim.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CameraMode {
+    /// Thresholded into an obstacle wall layer (dark = wall).
+    Wall,
+    /// Signed intensity pushes particles along a fixed direction:
+    /// v += dir * (luma - threshold) * force. Threshold is the neutral
+    /// level; brighter pushes along the direction, darker pushes opposite.
+    Flow,
+}
+
+/// Camera field configuration (`--camera`): luma from a V4L2 device becomes
+/// a wall layer or a directional flow field. Native interactive only.
+pub struct CameraConfig {
+    /// V4L2 device path, e.g. /dev/video0.
+    pub path: String,
+    pub mode: CameraMode,
+    /// Wall: open where luma/255 > threshold. Flow: the neutral level.
+    /// `invert` flips (wall: bright = wall; flow: sign flip).
+    pub threshold: f64,
+    pub invert: bool,
+    /// Flow: push direction, degrees clockwise from 3 o'clock (y down;
+    /// 90 = toward 6 o'clock).
+    pub dir_deg: f64,
+    /// Flow: speed at full intensity, units/s.
+    pub force: f64,
+}
+
+/// Live camera state: the reader thread fills `latest` (a latest-frame
+/// mailbox); the app thread drains it, thresholds, and rebuilds the sim's
+/// wall grid.
+struct CameraState {
+    cfg: CameraConfig,
+    latest: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+    /// Last received luma frame (kept so threshold edits re-process
+    /// without waiting for the next frame).
+    frame: Option<Vec<u8>>,
+    /// Rebuild the wall grid (new frame or changed threshold/invert).
+    dirty: bool,
+}
+
+/// Pipe grayscale frames from the device via an ffmpeg subprocess
+/// (center-cropped square, CAM_RES x CAM_RES, mirrored so it behaves like a
+/// mirror). A subprocess keeps the project free of V4L/camera crates; the
+/// thread exits when ffmpeg does (device unplugged, no ffmpeg installed).
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_camera_reader(
+    path: String,
+    latest: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+) {
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let vf = format!(
+            "crop=min(iw\\,ih):min(iw\\,ih),scale={CAM_RES}:{CAM_RES},hflip,format=gray"
+        );
+        let child = std::process::Command::new("ffmpeg")
+            .args([
+                "-loglevel", "quiet", "-f", "v4l2", "-i", &path, "-vf", &vf, "-f",
+                "rawvideo", "-",
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        let Ok(mut child) = child else { return };
+        let Some(mut out) = child.stdout.take() else { return };
+        let mut buf = vec![0u8; CAM_RES * CAM_RES];
+        while out.read_exact(&mut buf).is_ok() {
+            if let Ok(mut slot) = latest.lock() {
+                *slot = Some(buf.clone());
+            }
+        }
+        let _ = child.kill();
+    });
+}
+
 /// A complete externally-set configuration, applied live. Used by the web
 /// component (attribute changes land here); native runs never push one.
 #[derive(Clone, Copy)]
@@ -63,6 +142,9 @@ pub struct ClockApp {
     /// Dish shape editor text (CLI grammar) and its last parse error.
     dish_text: String,
     dish_status: Option<String>,
+    /// Camera obstacle field, when started with --camera. Never Some on
+    /// wasm.
+    camera: Option<CameraState>,
     /// Persist config changes to preset::autosave_path() (throttled, on
     /// change) so the next start restores them. Native only.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -84,8 +166,20 @@ impl ClockApp {
         face_cfg: FaceConfigs,
         show_panel: bool,
         autosave: bool,
+        camera: Option<CameraConfig>,
         pending: Option<PendingConfig>,
     ) -> Self {
+        let camera = camera.map(|cfg| {
+            let latest = std::sync::Arc::new(std::sync::Mutex::new(None));
+            #[cfg(not(target_arch = "wasm32"))]
+            spawn_camera_reader(cfg.path.clone(), latest.clone());
+            CameraState {
+                cfg,
+                latest,
+                frame: None,
+                dirty: false,
+            }
+        });
         let speed = clock.multiplier();
         let sim_time = clock.now();
         Self {
@@ -109,6 +203,7 @@ impl ClockApp {
             preset_status: None,
             dish_text: params.dish.label(),
             dish_status: None,
+            camera,
             autosave,
             autosave_frames: 0,
             autosave_last: String::new(),
@@ -230,6 +325,50 @@ impl ClockApp {
         }
         if std::fs::write(&path, &json).is_ok() {
             self.autosave_last = json;
+        }
+    }
+
+    /// Drain the camera mailbox and rebuild the sim's wall grid from the
+    /// newest frame (or after a threshold/invert edit). Cheap: threshold +
+    /// two euclidean distance transforms at CAM_RES.
+    fn camera_tick(&mut self) {
+        let Some(cam) = &mut self.camera else { return };
+        if let Ok(mut slot) = cam.latest.lock() {
+            if let Some(f) = slot.take() {
+                cam.frame = Some(f);
+                cam.dirty = true;
+            }
+        }
+        if !cam.dirty {
+            return;
+        }
+        cam.dirty = false;
+        if let Some(frame) = &cam.frame {
+            match cam.cfg.mode {
+                CameraMode::Wall => {
+                    let thr = (cam.cfg.threshold * 255.0) as u8;
+                    let open: Vec<bool> =
+                        frame.iter().map(|&l| (l > thr) != cam.cfg.invert).collect();
+                    self.sim.wall_grid =
+                        Some(crate::dish::WallGrid::from_open_mask(&open, CAM_RES));
+                    self.sim.flow = None;
+                }
+                CameraMode::Flow => {
+                    let thr = cam.cfg.threshold as f32;
+                    let sign = if cam.cfg.invert { -1.0f32 } else { 1.0 };
+                    let vals: Vec<f32> = frame
+                        .iter()
+                        .map(|&l| (((l as f32 / 255.0) - thr) * 2.0).clamp(-1.0, 1.0) * sign)
+                        .collect();
+                    let a = cam.cfg.dir_deg.to_radians();
+                    self.sim.flow = Some(crate::sim::FlowField {
+                        grid: crate::dish::ScalarGrid::from_values(vals, CAM_RES),
+                        dir: crate::vec2::Vec2f::new(a.cos() as f32, a.sin() as f32),
+                        gain: cam.cfg.force as f32,
+                    });
+                    self.sim.wall_grid = None;
+                }
+            }
         }
     }
 
@@ -695,6 +834,44 @@ impl ClockApp {
             );
             ui.checkbox(&mut p.pointer_repel, "pointer repels");
         });
+        if let Some(cam) = &mut self.camera {
+            ui.collapsing("camera", |ui| {
+                let mut changed = false;
+                ui.horizontal(|ui| {
+                    ui.label("mode");
+                    changed |= ui
+                        .selectable_value(&mut cam.cfg.mode, CameraMode::Wall, "wall")
+                        .clicked();
+                    changed |= ui
+                        .selectable_value(&mut cam.cfg.mode, CameraMode::Flow, "flow")
+                        .clicked();
+                });
+                let thr_label = match cam.cfg.mode {
+                    CameraMode::Wall => "threshold",
+                    CameraMode::Flow => "neutral level",
+                };
+                changed |= ui
+                    .add(egui::Slider::new(&mut cam.cfg.threshold, 0.0..=1.0).text(thr_label))
+                    .changed();
+                changed |= ui.checkbox(&mut cam.cfg.invert, "invert").changed();
+                if cam.cfg.mode == CameraMode::Flow {
+                    changed |= ui
+                        .add(egui::Slider::new(&mut cam.cfg.dir_deg, 0.0..=360.0).text("dir deg"))
+                        .changed();
+                    changed |= ui
+                        .add(egui::Slider::new(&mut cam.cfg.force, 0.0..=0.3).text("force"))
+                        .changed();
+                }
+                if changed {
+                    cam.dirty = true;
+                }
+                ui.label(if cam.frame.is_some() {
+                    "receiving frames"
+                } else {
+                    "waiting for frames"
+                });
+            });
+        }
         ui.collapsing("render", |ui| {
             ui.add(
                 egui::Slider::new(&mut self.style.max_px, 0..=2048)
@@ -716,6 +893,7 @@ impl ClockApp {
             ui.checkbox(&mut self.views.velocity, "velocity color");
             ui.checkbox(&mut self.views.hash, "hash occupancy");
             ui.checkbox(&mut self.views.chains, "chain bonds");
+            ui.checkbox(&mut self.views.camera, "camera walls");
         });
         ui.separator();
         #[cfg(not(target_arch = "wasm32"))]
@@ -748,6 +926,8 @@ impl eframe::App for ClockApp {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+
+        self.camera_tick();
 
         if self.show_panel {
             self.dev_panel(ctx);

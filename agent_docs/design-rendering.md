@@ -9,9 +9,25 @@ Everything is drawn into one CPU RGBA pixel buffer by the software rasterizer
 in `src/render.rs` (`draw_clock`, SDF-based anti-aliased primitives), in this
 order:
 
-1. Clock face: dial, rim, and (hands face only) the 60 minute ticks. No
-   numerals; text rasterization is not worth a font dependency. The digital
-   seven-segment face skips the ticks, which would read oddly behind it.
+1. Clock face statics: background fill, dial, rim, and (hands face only) the
+   60 minute ticks. No numerals; text rasterization is not worth a font
+   dependency. The digital seven-segment face skips the ticks, which would
+   read oddly behind it. The dial and rim follow the dish shape
+   (`SimParams::dish`): the plain circle uses the original disc/ring calls,
+   shaped dishes fill/outline the SDF, which draws hole rims for free.
+   Style options: `outside_bg` recolors only the area outside the dial,
+   `transparent_bg` makes it alpha-0 (with a transparent window, only the
+   circular dial is visible; headless PNGs get transparent corners),
+   `face_color` fades the rim/tick colors from bg toward one accent color,
+   `show_face` off skips the statics entirely. Interactive mode caches this
+   whole layer (`FaceLayer`): re-rasterized only when its key changes (size,
+   colors, transforms, dish, face kind), otherwise the frame starts with a
+   memcpy. Measured 10.4 -> 3.0 ms/frame at 700 px; byte-identical because
+   the template is produced by the same rasterization code it replaces.
+   Headless passes no cache and rasterizes directly. The buffer is still
+   fully overwritten every frame, so the no-trails invariant holds.
+   Any new Style field that affects the statics must join `FaceLayerKey` or
+   stale frames ship.
 2. The face magnets, under the particle layer (they float below the particles
    in the fiction), and only when `Style::show_hands` is set. Hands draw as
    capsules from the time-derived angles; the seg and tide faces share one
@@ -21,16 +37,32 @@ order:
    the particles carry the reading.
 3. Particle layer.
 
+All drawing goes through `Map` (world to pixel), which also applies the view
+transforms: `Style::rotate` (degrees, clockwise) and `Style::flip_x` /
+`flip_y` (axis mirrors, applied before rotation). Pure presentation: sim,
+field, and `--dump-positions` stay in world space; the pointer mapping
+applies the inverse, so touches land where pressed and the 12 o'clock
+hotspot follows the transformed tick. Verified pixel-exact against
+image-space rotation/mirroring of the untransformed render.
+Never draw world geometry with explicit trig around the center; route
+endpoints through `Map::px` or transforms will miss it (the hands were
+converted for exactly this reason).
+
 Interactive mode uploads the buffer via `TextureHandle::set` and draws it as a
-single image; egui contributes only the window, the dev panel, and the
-pointer-magnet feedback ring. Headless mode writes the same buffer to PNG.
+single image; egui contributes only the window, the dev panel, the FPS
+overlay, and the pointer-magnet feedback rings (one per touch). Headless
+mode writes the same buffer to PNG.
 This replaces the earlier plan of a vector egui face in interactive mode: one
 render path means dumps are identical to the screen by construction, not by
 discipline. The wasm web component renders through the identical path.
 
 The interactive buffer size follows the window (physical pixels) capped by
 `Style::max_px` (default in `render.rs`; 0 = uncapped); the texture upscales
-linearly. Headless `--size` is exact and uncapped.
+linearly. `Style::pad` reserves a margin around the dial as a fraction of
+the window's short side. Headless `--size` is exact and uncapped. Window
+options are interactive-only: `--fullscreen` (borderless, Esc quits),
+`--window-size WxH`, and `--kiosk` (fullscreen + panel hidden + overlay
+panel + centered fps + outside_bg defaulting to black).
 
 ## Particle rasterization
 
@@ -113,6 +145,9 @@ Toggleable overlays, each a checkbox in the dev panel and a name in the
 - Particle velocity coloring (speed as hue) instead of the normal look.
 - Chain bonds: line segments between interacting neighbor pairs.
 - Spatial hash occupancy grid.
+- Camera walls: the camera obstacle field's blocked regions shaded red with
+  a bright boundary line (interactive with --camera only; headless has no
+  wall grid, so the view draws nothing there).
 
 All field tuning happens against the heatmap and quiver. Overlays are tuned
 for dark backgrounds; they stay legible but not pretty on light ones.
@@ -146,7 +181,8 @@ not exist headless; `--grad-check` verifies field math without rendering.
 
 ## Dev panel
 
-An egui side panel (vertical scroll for small windows). Ordered most-used
+An egui panel, docked or floating (see below; vertical scroll for small
+windows). Ordered most-used
 first: speed, the face selector (hands / seg / tide, with each face's own
 controls), a collapsible `magnets` section for the per-hand layout combos
 (hands mode), then particle count (live) and reset, the common look (show
@@ -157,14 +193,32 @@ repulsion, fluid scale). The rarely used tunables live in collapsing sections
 view toggles in their own collapsing section, so the panel is short by
 default. The per-hand magnet loop is factored into `ClockApp::magnet_controls`
 so the collapsible wrapper stays a few lines. Slider ranges come from the
-shared `bounds` table in `src/sim.rs`, not inline literals. A native-only
+shared `bounds` table in `src/sim.rs`, not inline literals. A dish text row
+(CLI grammar + apply button) edits the container shape live. A native-only
 preset row (path field + save/load) serializes the whole config to JSON via
 `src/preset.rs`; the CLI has `--preset` / `--save-preset` and the web handle
 `get_preset` / `set_preset` (exposed as `savePreset()` / `loadPreset()` on the
-`<magnetic-clock>` element). Native shows it by default (`--no-dev-panel`
-starts hidden); the web component hides it unless the `dev-panel` attribute is
-set. Tapping the 12 o'clock tick toggles it anywhere (native and web); the
-pointer magnet is suppressed inside that hotspot so the tap does not stir the
-particles. An optional FPS overlay (`Style::show_fps`, `--fps`, `fps`
-attribute, panel checkbox) draws the smoothed frame rate as an egui label in
-the top-left corner, independent of the panel.
+`<magnetic-clock>` element). Below it, native-only: an autosave checkbox
+(persists config changes to `preset::autosave_path()`, throttled and
+change-gated; file presence means enabled and the next interactive start
+loads it as the base config, explicit flags overriding; unchecking deletes
+the file; `--no-autosave` ignores it for a run; headless / `--grad-check` /
+`--save-preset` runs never load it, for reproducibility), and a dump frame /
+exit button row.
+
+The panel has two homes (`Style::panel_overlay`, `--dev-overlay`, "overlay"
+checkbox): the docked right `SidePanel` (takes layout space, shrinks the
+clock) or a floating egui window over the dial (the clock keeps full size;
+draggable by its title bar, close button = the hotspot toggle, default
+position right edge vertically centered, session-only placement memory).
+Native shows the panel by default (`--no-dev-panel` starts hidden); the web
+component hides it unless the `dev-panel` attribute is set. Tapping the 12
+o'clock tick toggles it anywhere (native and web); the pointer magnet is
+suppressed inside that hotspot so the tap does not stir the particles.
+Raw pointer input reaches the sim only when egui does not own it; see the
+input-ownership entry in [gotchas.md](gotchas.md).
+
+An optional FPS overlay (`Style::show_fps`, `--fps`, `fps` attribute, panel
+checkbox) draws the smoothed frame rate as an egui label, top-left by
+default or top-center with `Style::fps_center` (`--fps-center`, kiosk
+default), independent of the panel.
