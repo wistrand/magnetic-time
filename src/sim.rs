@@ -611,12 +611,18 @@ impl Sim {
         // envelope-scaled speed; each particle keeps one random direction
         // for the whole burst (keyed by burst id) so the shove is coherent.
         let mut disturb32 = 0.0f32;
-        if p.disturb_every > 0.0 && p.disturb_force > 0.0 {
-            self.disturb_acc += p.dt;
-            if self.disturb_acc >= p.disturb_every {
+        if p.disturb_force > 0.0 {
+            // Periodic scheduling; a manual burst (`disturb()`) runs through
+            // the same envelope below with disturb_every 0.
+            if p.disturb_every > 0.0 {
+                self.disturb_acc += p.dt;
+                if self.disturb_acc >= p.disturb_every {
+                    self.disturb_acc = 0.0;
+                    self.disturb_burst_t = 0.0;
+                    self.disturb_burst_id += 1;
+                }
+            } else {
                 self.disturb_acc = 0.0;
-                self.disturb_burst_t = 0.0;
-                self.disturb_burst_id += 1;
             }
             if self.disturb_burst_t < DISTURB_SMOOTH {
                 let x = self.disturb_burst_t / DISTURB_SMOOTH;
@@ -632,6 +638,15 @@ impl Sim {
             .seed
             .wrapping_add(0x5851F42D4C957F2D)
             ^ self.disturb_burst_id.wrapping_mul(0x9E3779B97F4A7C15);
+        // Rim band where the kick's outward component fades to zero: the
+        // burst's expected net travel (peak * duration * mean envelope).
+        // Without this, every burst drives the outward half of the rim
+        // particles into the dish wall and they pile up there as a bright
+        // ring (measured: ~19% of particles past DISH_R mid-burst vs ~1%
+        // at rest).
+        let disturb_reach = (p.disturb_force * DISTURB_SMOOTH * 0.5)
+            .clamp(0.05, DISH_R * 0.5) as f32;
+        let disturb_band = DISH_R as f32 - disturb_reach;
         let drag_coupling32 = p.drag_coupling as f32;
         let cone_t32 = cone_t as f32;
         let dish_r32 = DISH_R as f32;
@@ -782,12 +797,26 @@ impl Sim {
 
             // Periodic disturbance: direction is stable for the whole burst
             // (per-particle stream keyed by burst id), speed follows the
-            // envelope, so each particle gets one smooth coherent shove.
+            // envelope, so each particle gets one smooth coherent shove. In
+            // the rim band the outward component fades out (tangential-only
+            // at the wall) so bursts scramble the edge without piling
+            // particles against it.
             if disturb32 > 0.0 {
                 let mut rng =
                     Rng::new(disturb_base ^ (i as u64).wrapping_mul(0xA24BAED4963EE407));
                 let a = rng.f64() as f32 * tau32;
-                v += Vec2f::new(a.cos(), a.sin()) * disturb32;
+                let mut d = Vec2f::new(a.cos(), a.sin());
+                let rad = pos.len();
+                if rad > disturb_band {
+                    let rhat = pos / rad.max(1e-6);
+                    let out = d.dot(rhat);
+                    if out > 0.0 {
+                        let w = ((rad - disturb_band) / (dish_r32 - disturb_band))
+                            .clamp(0.0, 1.0);
+                        d = d - rhat * (out * w);
+                    }
+                }
+                v += d * disturb32;
             }
 
             *vel = v;
@@ -839,6 +868,15 @@ impl Sim {
         });
 
         self.step_index += 1;
+    }
+
+    /// Start a disturbance burst now (same smooth envelope as the periodic
+    /// one; needs disturb_force > 0). Also resets the periodic phase so a
+    /// manual kick does not immediately double up with a scheduled one.
+    pub fn disturb(&mut self) {
+        self.disturb_acc = 0.0;
+        self.disturb_burst_t = 0.0;
+        self.disturb_burst_id += 1;
     }
 
     /// Advance the sim from display time `t0` over `seconds`, rebuilding the

@@ -813,7 +813,7 @@ impl eframe::App for ClockApp {
                         .is_some_and(|l| l.order != egui::Order::Background)
                 };
 
-                let (clicked, primary_down, ipos) = ctx.input(|i| {
+                let (clicked, double_clicked, primary_down, ipos) = ctx.input(|i| {
                     // Track raw touch points; egui also mirrors the first
                     // touch into the synthesized pointer, so while any touch
                     // is active the touch map is the sole magnet source.
@@ -831,6 +831,7 @@ impl eframe::App for ClockApp {
                     }
                     (
                         i.pointer.primary_clicked(),
+                        i.pointer.button_double_clicked(egui::PointerButton::Primary),
                         i.pointer.primary_down(),
                         i.pointer.interact_pos(),
                     )
@@ -840,6 +841,19 @@ impl eframe::App for ClockApp {
                     if let Some(pos) = ipos {
                         if avail.contains(pos) && !egui_owns(pos) && in_hotspot(to_world(pos)) {
                             self.show_panel = !self.show_panel;
+                        }
+                    }
+                }
+
+                // Double-click/tap on the dial: fire a disturbance burst,
+                // same envelope as the periodic one.
+                if double_clicked && !widget_active {
+                    if let Some(pos) = ipos {
+                        if avail.contains(pos) && !egui_owns(pos) {
+                            let world = to_world(pos);
+                            if world.len() <= 1.05 && !in_hotspot(world) {
+                                self.sim.disturb();
+                            }
                         }
                     }
                 }

@@ -155,7 +155,8 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--disturb-every SEC]  scramble the particles every SEC
                      display seconds with a smooth burst (~0.5 s ramp, one
                      random direction per particle per burst; 0 = off);
-                     [--disturb-force F] sets the peak burst speed, units/s
+                     [--disturb-force F] sets the peak burst speed, units/s;
+                     double-click/tap on the dial fires the same burst
                      [--mobility F] [--max-speed F] [--noise F] [--repulsion F]
                      [--repulsion-radius F] [--chain-speed-cap F]
                      [--chain-neighbors N] [--dt F] [--field-clamp F] [--fluid-scale F]
