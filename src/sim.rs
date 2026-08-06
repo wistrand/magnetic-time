@@ -268,7 +268,7 @@ pub mod bounds {
     pub const FIELD_CLAMP: Bound = positive(0.005, 0.08);
     pub const FLUID_SCALE: Bound = positive(0.1, 8.0);
     pub const DRAG_COUPLING: Bound = unit(1.0);
-    pub const DISTURB_EVERY: Bound = non_neg(0.0, 120.0);
+    pub const DISTURB_EVERY: Bound = non_neg(0.0, 3600.0);
     pub const DISTURB_FORCE: Bound = non_neg(0.0, 3.0);
     pub const POINTER_STRENGTH: Bound = non_neg(0.0, 150.0);
     pub const POINTER_RADIUS: Bound = positive(0.005, 0.5);

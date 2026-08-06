@@ -741,6 +741,7 @@ impl ClockApp {
             ui.add(egui::Slider::new(&mut p.noise, crate::sim::bounds::NOISE.ui()).text("noise"));
             ui.add(
                 egui::Slider::new(&mut p.disturb_every, crate::sim::bounds::DISTURB_EVERY.ui())
+                    .logarithmic(true)
                     .text("disturb every s (0 = off)"),
             );
             ui.add(
