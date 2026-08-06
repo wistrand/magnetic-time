@@ -149,6 +149,8 @@ pub struct ClockApp {
     /// scheduling only).
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     last_frame: web_time::Instant,
+    /// Smoothed measured frame time for the FPS overlay (0 = no sample yet).
+    fps_dt: f32,
     /// Persist config changes to preset::autosave_path() (throttled, on
     /// change) so the next start restores them. Native only.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -209,6 +211,7 @@ impl ClockApp {
             dish_status: None,
             camera,
             last_frame: web_time::Instant::now(),
+            fps_dt: 0.0,
             autosave,
             autosave_frames: 0,
             autosave_last: String::new(),
@@ -956,9 +959,19 @@ impl eframe::App for ClockApp {
         }
 
         if self.style.show_fps {
-            // egui's smoothed frame time; overlaid as a corner label (the
-            // pixel buffer has no text). Floats above the clock, panel or not.
-            let fps = 1.0 / ctx.input(|i| i.stable_dt).max(1e-6);
+            // Measured frame time, self-smoothed; overlaid as a corner label
+            // (the pixel buffer has no text). Floats above the clock, panel
+            // or not. Not egui's stable_dt: under the fps cap repaints are
+            // scheduled with request_repaint_after, and stable_dt then
+            // reports egui's PREDICTED dt (the vsync guess), showing e.g. 60
+            // while frames actually run at the cap.
+            let dt = ctx.input(|i| i.unstable_dt).clamp(1e-6, 1.0);
+            self.fps_dt = if self.fps_dt > 0.0 {
+                self.fps_dt * 0.9 + dt * 0.1
+            } else {
+                dt
+            };
+            let fps = 1.0 / self.fps_dt;
             let (align, offset) = if self.style.fps_center {
                 (egui::Align2::CENTER_TOP, egui::vec2(0.0, 6.0))
             } else {
