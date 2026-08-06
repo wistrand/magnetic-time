@@ -118,6 +118,7 @@ pub fn to_json(face: &FaceConfigs, sim: &SimParams, style: &Style, speed: f64) -
     e.push(format!("{}: {}", q("show_face"), style.show_face));
     e.push(format!("{}: {}", q("show_fps"), style.show_fps));
     e.push(format!("{}: {}", q("fps_center"), style.fps_center));
+    num_line(&mut e, "fps_cap", style.fps_cap as f64);
     e.push(format!("{}: {}", q("panel_overlay"), style.panel_overlay));
     num_line(&mut e, "max_px", style.max_px as f64);
     num_line(&mut e, "heatmap_res", style.heatmap_res as f64);
@@ -444,6 +445,9 @@ pub fn apply_json(
     }
     if let Some(v) = flag("fps_center") {
         style.fps_center = v;
+    }
+    if let Some(v) = num("fps_cap") {
+        style.fps_cap = v.clamp(0.0, 1000.0) as u32;
     }
     if let Some(v) = flag("panel_overlay") {
         style.panel_overlay = v;

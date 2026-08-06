@@ -179,6 +179,9 @@ const USAGE: &str = "usage: magnetic-time [--headless --dump PATH] [--time HH:MM
                      [--no-autosave]  ignore the autosave file this run
                      [--fps]  show a frame-rate overlay (interactive)
                      [--fps-center]  the overlay at top center (implies --fps)
+                     [--fps-cap N]  cap the interactive frame rate (0 =
+                     uncapped; frame pacing only, the fixed-dt sim is
+                     unaffected; --kiosk defaults to 30)
                      [--dish SHAPE]  dish shape: circle (default),
                      square[:CORNER], super[:N] (superellipse),
                      star[:N[:INNER]] (N-spiked star, notch radius INNER),
@@ -228,6 +231,8 @@ fn parse_args() -> Result<Options, String> {
     // Applied after the loop so --strengths/--shapes work in any flag order.
     let mut strengths: Option<[f64; 3]> = None;
     let mut shapes: Option<[field::SpecShape; 3]> = None;
+    // --fps-cap was given; --kiosk only defaults the cap when it was not.
+    let mut fps_cap_explicit = false;
     let raw: Vec<String> = std::env::args().skip(1).collect();
     // Autosaved config loads as the base so explicit flags still override.
     // Interactive runs only: headless/grad-check experiments and preset dumps
@@ -543,6 +548,12 @@ fn parse_args() -> Result<Options, String> {
                 opts.kiosk = true;
             }
             "--fps" => opts.style.show_fps = true,
+            "--fps-cap" => {
+                opts.style.fps_cap = value("--fps-cap", &mut args)?
+                    .parse()
+                    .map_err(|e| format!("--fps-cap: {e}"))?;
+                fps_cap_explicit = true;
+            }
             "--fps-center" => {
                 opts.style.show_fps = true;
                 opts.style.fps_center = true;
@@ -575,6 +586,12 @@ fn parse_args() -> Result<Options, String> {
     }
     if opts.kiosk && opts.style.outside_bg.is_none() {
         opts.style.outside_bg = Some([0, 0, 0]);
+    }
+    // Kiosk default frame cap: wall displays do not need more, and it holds
+    // power/heat down. An explicit --fps-cap (incl. 0) or a nonzero
+    // autosaved/preset value wins.
+    if opts.kiosk && !fps_cap_explicit && opts.style.fps_cap == 0 {
+        opts.style.fps_cap = 30;
     }
     if opts.headless && opts.dump.is_none() {
         return Err("--headless requires --dump PATH".to_string());

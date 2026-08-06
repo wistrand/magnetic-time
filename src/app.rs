@@ -145,6 +145,10 @@ pub struct ClockApp {
     /// Camera obstacle field, when started with --camera. Never Some on
     /// wasm.
     camera: Option<CameraState>,
+    /// Frame-pacing anchor for the fps cap (native; wasm uses repaint
+    /// scheduling only).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    last_frame: web_time::Instant,
     /// Persist config changes to preset::autosave_path() (throttled, on
     /// change) so the next start restores them. Native only.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -204,6 +208,7 @@ impl ClockApp {
             dish_text: params.dish.label(),
             dish_status: None,
             camera,
+            last_frame: web_time::Instant::now(),
             autosave,
             autosave_frames: 0,
             autosave_last: String::new(),
@@ -878,6 +883,9 @@ impl ClockApp {
                     .text("res cap px (0 = off)"),
             );
             ui.add(egui::Slider::new(&mut self.style.pad, 0.0..=0.45).text("dial padding"));
+            ui.add(
+                egui::Slider::new(&mut self.style.fps_cap, 0..=240).text("fps cap (0 = off)"),
+            );
             ui.add(egui::Slider::new(&mut self.style.rotate, 0.0..=360.0).text("rotate deg"));
             ui.horizontal(|ui| {
                 ui.checkbox(&mut self.style.flip_x, "flip x");
@@ -913,6 +921,20 @@ impl ClockApp {
 
 impl eframe::App for ClockApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Frame pacing (fps cap): sleep off the remainder of the period.
+        // Wall-clock, but pacing only; the fixed-dt sim is untouched (the
+        // catch-up loop absorbs any cadence). Native only; wasm frames are
+        // driven by requestAnimationFrame and the repaint delay below.
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.style.fps_cap > 0 {
+            let period = web_time::Duration::from_secs_f64(1.0 / self.style.fps_cap as f64);
+            let elapsed = self.last_frame.elapsed();
+            if elapsed < period {
+                std::thread::sleep(period - elapsed);
+            }
+            self.last_frame = web_time::Instant::now();
+        }
+
         let pushed = self
             .pending
             .as_ref()
@@ -1147,7 +1169,16 @@ impl eframe::App for ClockApp {
         self.autosave_tick();
 
         // Idle egui repaints only on input; without this the clock freezes.
-        ctx.request_repaint();
+        // With a cap, schedule the next repaint a period out instead of
+        // immediately (input can still wake earlier; the sleep above holds
+        // the cap on native regardless).
+        if self.style.fps_cap > 0 {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(
+                1.0 / self.style.fps_cap as f64,
+            ));
+        } else {
+            ctx.request_repaint();
+        }
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {

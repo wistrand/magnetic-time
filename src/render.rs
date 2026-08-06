@@ -257,6 +257,9 @@ pub struct Style {
     pub show_fps: bool,
     /// Anchor the FPS overlay top center instead of the top-left corner.
     pub fps_center: bool,
+    /// Interactive frame-rate cap, frames/s; 0 = uncapped. Frame pacing
+    /// only: the fixed-dt sim is unaffected (catch-up stepping).
+    pub fps_cap: u32,
     /// Dev panel floats over the dial instead of docking as a side panel,
     /// so opening it does not resize the clock (interactive only).
     pub panel_overlay: bool,
@@ -293,6 +296,7 @@ impl Default for Style {
             max_px: 700,
             show_fps: false,
             fps_center: false,
+            fps_cap: 0,
             panel_overlay: false,
             heatmap_res: 0,
             pad: 0.0,
